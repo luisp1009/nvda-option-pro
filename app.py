@@ -846,6 +846,13 @@ def build_scan(symbol: str):
 def home():
     return render_template("index.html", supported_symbols=DEFAULT_SYMBOLS)
 
+@app.route("/version")
+def version():
+    return jsonify({
+        "version": "options-render-fallback-v4",
+        "min_dte": MIN_DTE,
+        "max_dte": MAX_DTE
+    })
 
 @app.route("/scan")
 def scan():
