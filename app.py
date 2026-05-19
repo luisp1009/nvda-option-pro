@@ -854,6 +854,43 @@ def version():
         "max_dte": MAX_DTE
     })
 
+@app.route("/debug-options")
+def debug_options():
+    symbol = normalize_symbol(request.args.get("symbol", DEFAULT_SYMBOL))
+
+    try:
+        ticker = yf.Ticker(symbol)
+        expirations = list(ticker.options)
+
+        result = {
+            "symbol": symbol,
+            "version": APP_VERSION,
+            "min_dte": MIN_DTE,
+            "max_dte": MAX_DTE,
+            "expiration_count": len(expirations),
+            "expirations": expirations[:10],
+        }
+
+        if expirations:
+            exp = expirations[0]
+            chain = ticker.option_chain(exp)
+
+            result["test_expiration"] = exp
+            result["calls_count"] = len(chain.calls)
+            result["puts_count"] = len(chain.puts)
+            result["sample_calls"] = chain.calls.head(3).to_dict("records")
+            result["sample_puts"] = chain.puts.head(3).to_dict("records")
+
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({
+            "symbol": symbol,
+            "version": APP_VERSION,
+            "error": str(e),
+        }), 500
+    
+
 @app.route("/scan")
 def scan():
     symbol = normalize_symbol(request.args.get("symbol", "SPY"))
