@@ -11,8 +11,8 @@ app = Flask(__name__)
 
 DEFAULT_SYMBOLS = ["SPY", "NVDA", "AAPL", "MSFT", "TSLA", "AMD", "AMZN", "META", "QQQ"]
 
-MIN_DTE = 7
-MAX_DTE = 35
+MIN_DTE = 1
+MAX_DTE = 60
 RISK_FREE_RATE = 0.045
 
 ATR_LEN = 14
