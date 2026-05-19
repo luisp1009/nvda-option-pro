@@ -590,15 +590,6 @@ def get_best_options(symbol: str, signal: dict):
     if stock_price <= 0:
         return []
 
-    signal_direction = signal.get("direction", "NO TRADE")
-
-    # Important:
-    # Even if signal is NO TRADE, scan both CALLS and PUTS
-    if signal_direction in {"CALL", "PUT"}:
-        directions_to_scan = [signal_direction]
-    else:
-        directions_to_scan = ["CALL", "PUT"]
-
     valid_dates = option_dates_in_range(ticker, MIN_DTE, MAX_DTE)
 
     print("VALID OPTION DATES:", valid_dates)
@@ -608,7 +599,8 @@ def get_best_options(symbol: str, signal: dict):
 
     all_picks = []
 
-    for scan_direction in directions_to_scan:
+    # Always scan both sides so the table always has CALL or PUT suggestions
+    for scan_direction in ["CALL", "PUT"]:
         picks = collect_option_picks_for_direction(
             ticker=ticker,
             symbol=symbol,
@@ -632,7 +624,6 @@ def get_best_options(symbol: str, signal: dict):
             seen.add(key)
 
     return deduped[:TOP_OPTION_PICKS]
-
 
 def format_candles(df: pd.DataFrame):
     candles = []
