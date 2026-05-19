@@ -858,43 +858,53 @@ def version():
 def debug_options():
     symbol = normalize_symbol(request.args.get("symbol", DEFAULT_SYMBOL))
 
+    result = {
+        "symbol": symbol,
+        "version": APP_VERSION,
+        "min_dte": MIN_DTE,
+        "max_dte": MAX_DTE,
+        "step": "started"
+    }
+
     try:
         ticker = yf.Ticker(symbol)
-        expirations = list(ticker.options)
+        result["step"] = "ticker_created"
 
-        result = {
-            "symbol": symbol,
-            "version": APP_VERSION,
-            "min_dte": MIN_DTE,
-            "max_dte": MAX_DTE,
-            "expiration_count": len(expirations),
-            "expirations": expirations[:10],
-        }
+        try:
+            expirations = list(ticker.options)
+            result["step"] = "got_expirations"
+            result["expiration_count"] = len(expirations)
+            result["expirations"] = expirations[:10]
+        except Exception as e:
+            result["step"] = "expiration_error"
+            result["error"] = str(e)
+            return jsonify(result), 200
 
-        if expirations:
-            exp = expirations[0]
+        if not expirations:
+            result["step"] = "no_expirations"
+            return jsonify(result), 200
+
+        exp = expirations[0]
+        result["test_expiration"] = exp
+
+        try:
             chain = ticker.option_chain(exp)
+            result["step"] = "got_option_chain"
+            result["calls_count"] = int(len(chain.calls))
+            result["puts_count"] = int(len(chain.puts))
+        except Exception as e:
+            result["step"] = "option_chain_error"
+            result["error"] = str(e)
+            return jsonify(result), 200
 
-            calls = chain.calls.copy()
-            puts = chain.puts.copy()
-
-            result["test_expiration"] = exp
-            result["calls_count"] = int(len(calls))
-            result["puts_count"] = int(len(puts))
-
-            result["sample_calls"] = calls.head(3).astype(str).to_dict("records")
-            result["sample_puts"] = puts.head(3).astype(str).to_dict("records")
-
-        return jsonify(result)
+        return jsonify(result), 200
 
     except Exception as e:
-        print("DEBUG OPTIONS ERROR:", str(e))
-        return jsonify({
-            "symbol": symbol,
-            "version": APP_VERSION,
-            "error": str(e),
-        }), 500
-
+        result["step"] = "fatal_error"
+        result["error"] = str(e)
+        return jsonify(result), 200
+    
+    
 @app.route("/scan")
 def scan():
     symbol = normalize_symbol(request.args.get("symbol", "SPY"))
