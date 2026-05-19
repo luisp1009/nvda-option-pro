@@ -8,9 +8,10 @@ from flask import Flask, jsonify, render_template, request
 
 app = Flask(__name__)
 
+APP_VERSION = "options-render-fallback-v4"
+
 DEFAULT_SYMBOL = "NVDA"
 
-# More flexible option date range
 MIN_DTE = 1
 MAX_DTE = 60
 
@@ -136,6 +137,7 @@ def get_price_data(symbol: str):
         auto_adjust=False,
         progress=False,
         prepost=True,
+        threads=False,
     )
 
     slow = yf.download(
@@ -145,6 +147,7 @@ def get_price_data(symbol: str):
         auto_adjust=False,
         progress=False,
         prepost=True,
+        threads=False,
     )
 
     fast = flatten_columns(fast).dropna().copy()
@@ -232,7 +235,6 @@ def build_signal(symbol: str):
         stop = round(trigger - current_atr * STOP_ATR_MULT, 2)
         risk = trigger - stop
         target = round(trigger + risk * TARGET_R_MULT, 2)
-
         score = min(round((bull_score / 8) * 100), 100)
 
         return {
@@ -257,7 +259,6 @@ def build_signal(symbol: str):
         stop = round(trigger + current_atr * STOP_ATR_MULT, 2)
         risk = stop - trigger
         target = round(trigger - risk * TARGET_R_MULT, 2)
-
         score = min(round((bear_score / 8) * 100), 100)
 
         return {
@@ -321,17 +322,23 @@ def option_dates_in_range(ticker, min_dte: int, max_dte: int):
     return valid
 
 
-def score_option_row(row: pd.Series, stock_price: float, dte: int) -> float:
-    mid = float(row["mid"])
-    spread_pct = float(row["spread_pct"])
-    oi = int(row["openInterest"])
-    vol = int(row["volume"])
-    strike = float(row["strike"])
-
+def safe_float(value, default=0.0):
     try:
-        delta_abs = abs(float(row["delta_est"]))
+        value = float(value)
+        if math.isnan(value) or math.isinf(value):
+            return default
+        return value
     except Exception:
-        delta_abs = 0.0
+        return default
+
+
+def score_option_row(row: pd.Series, stock_price: float, dte: int) -> float:
+    mid = safe_float(row.get("mid"), 0.0)
+    spread_pct = safe_float(row.get("spread_pct"), 9.99)
+    oi = int(safe_float(row.get("openInterest"), 0))
+    vol = int(safe_float(row.get("volume"), 0))
+    strike = safe_float(row.get("strike"), 0.0)
+    delta_abs = abs(safe_float(row.get("delta_est"), 0.0))
 
     liquidity_score = min(oi / 1000, 1.5) + min(vol / 300, 1.0)
     spread_score = max(0.0, 1.4 - spread_pct * 3)
@@ -340,62 +347,112 @@ def score_option_row(row: pd.Series, stock_price: float, dte: int) -> float:
     dte_score = max(0.0, 1.3 - abs(dte - 21) / 25)
     premium_score = 1.0 if 0.10 <= mid <= 100 else 0.3
 
-    total = (
+    return round(
         liquidity_score
         + spread_score
         + moneyness_score
         + delta_score
         + dte_score
-        + premium_score
+        + premium_score,
+        4,
     )
-
-    return round(total, 4)
 
 
 def build_option_why(row: pd.Series, dte: int, filter_name: str) -> str:
+    vol = int(safe_float(row.get("volume"), 0))
+    oi = int(safe_float(row.get("openInterest"), 0))
+    spread = safe_float(row.get("spread_pct"), 9.99)
+    delta = safe_float(row.get("delta_est"), 0.0)
+
     notes = []
 
-    vol = int(row.get("volume", 0))
-    oi = int(row.get("openInterest", 0))
-    spread = float(row.get("spread_pct", 999))
-    delta = float(row.get("delta_est", 0))
-
-    if vol >= 100:
-        notes.append("good volume")
-    elif vol > 0:
-        notes.append("some volume")
-    else:
-        notes.append("low volume")
-
-    if oi >= 500:
-        notes.append("solid open interest")
-    elif oi >= 50:
-        notes.append("usable open interest")
-    else:
-        notes.append("low open interest")
-
-    if spread <= 0.10:
-        notes.append("tight spread")
-    elif spread <= 0.35:
-        notes.append("acceptable spread")
-    else:
-        notes.append("wide spread")
-
-    if 14 <= dte <= 35:
-        notes.append("good expiration range")
-    else:
-        notes.append("short/long DTE")
-
-    if abs(delta) >= 0.40:
-        notes.append("stronger delta")
-    elif abs(delta) >= 0.20:
-        notes.append("usable delta")
-    else:
-        notes.append("low delta")
-
+    notes.append("good volume" if vol >= 100 else "some volume" if vol > 0 else "low volume")
+    notes.append("solid open interest" if oi >= 500 else "usable open interest" if oi >= 50 else "low open interest")
+    notes.append("tight spread" if spread <= 0.10 else "acceptable spread" if spread <= 0.35 else "wide spread")
+    notes.append("good expiration range" if 14 <= dte <= 35 else "short/long DTE")
+    notes.append("stronger delta" if abs(delta) >= 0.40 else "usable delta" if abs(delta) >= 0.20 else "low delta")
     notes.append(f"{filter_name} filter")
 
     return ", ".join(notes)
+
+
+def normalize_option_chain_df(df: pd.DataFrame, stock_price: float, dte: int, option_type: str) -> pd.DataFrame:
+    df = df.copy()
+
+    needed = ["bid", "ask", "lastPrice", "volume", "openInterest", "impliedVolatility", "strike"]
+    for col in needed:
+        if col not in df.columns:
+            df[col] = 0
+
+    df["bid"] = pd.to_numeric(df["bid"], errors="coerce").fillna(0.0)
+    df["ask"] = pd.to_numeric(df["ask"], errors="coerce").fillna(0.0)
+    df["lastPrice"] = pd.to_numeric(df["lastPrice"], errors="coerce").fillna(0.0)
+    df["volume"] = pd.to_numeric(df["volume"], errors="coerce").fillna(0).astype(int)
+    df["openInterest"] = pd.to_numeric(df["openInterest"], errors="coerce").fillna(0).astype(int)
+    df["impliedVolatility"] = pd.to_numeric(df["impliedVolatility"], errors="coerce").fillna(0.0)
+    df["strike"] = pd.to_numeric(df["strike"], errors="coerce").fillna(0.0)
+
+    df["mid"] = np.where(
+        (df["bid"] > 0) & (df["ask"] > 0),
+        (df["bid"] + df["ask"]) / 2,
+        df["lastPrice"],
+    )
+
+    df = df[(df["mid"] > 0) | (df["lastPrice"] > 0)].copy()
+
+    if df.empty:
+        return df
+
+    df["spread_pct"] = np.where(
+        df["mid"] > 0,
+        (df["ask"] - df["bid"]).clip(lower=0) / df["mid"],
+        9.99,
+    )
+
+    years_to_exp = max(dte, 1) / 365.0
+
+    df["delta_est"] = df.apply(
+        lambda row: bs_delta(
+            stock_price,
+            float(row["strike"]),
+            years_to_exp,
+            RISK_FREE_RATE,
+            max(float(row["impliedVolatility"]), 0.0001),
+            option_type,
+        ),
+        axis=1,
+    )
+
+    df["distance_from_price"] = (df["strike"] - stock_price).abs()
+    df["score"] = df.apply(lambda row: score_option_row(row, stock_price, dte), axis=1)
+
+    return df
+
+
+def row_to_pick(row: pd.Series, scan_direction: str, exp: str, dte: int, filter_name: str) -> dict:
+    mid = round(safe_float(row.get("mid"), 0.0), 2)
+
+    return {
+        "direction": scan_direction,
+        "contract_symbol": str(row.get("contractSymbol", "")),
+        "expiration": exp,
+        "dte": dte,
+        "strike": round(safe_float(row.get("strike"), 0.0), 2),
+        "bid": round(safe_float(row.get("bid"), 0.0), 2),
+        "ask": round(safe_float(row.get("ask"), 0.0), 2),
+        "mid": mid,
+        "last": round(safe_float(row.get("lastPrice"), 0.0), 2),
+        "volume": int(safe_float(row.get("volume"), 0)),
+        "open_interest": int(safe_float(row.get("openInterest"), 0)),
+        "iv": round(safe_float(row.get("impliedVolatility"), 0.0) * 100, 2),
+        "delta_est": round(safe_float(row.get("delta_est"), 0.0), 3),
+        "spread_pct": round(safe_float(row.get("spread_pct"), 9.99) * 100, 2),
+        "option_stop": round(mid * (1 - OPTION_STOP_PCT), 2),
+        "option_target": round(mid * (1 + OPTION_TARGET_PCT), 2),
+        "score": round(safe_float(row.get("score"), 0.0), 3),
+        "why": build_option_why(row, dte, filter_name),
+        "filter_used": filter_name,
+    }
 
 
 def collect_option_picks_for_direction(
@@ -408,179 +465,81 @@ def collect_option_picks_for_direction(
     option_side = "calls" if scan_direction == "CALL" else "puts"
     option_type = "call" if scan_direction == "CALL" else "put"
 
-    # Starts strict, then gets looser until contracts are found
+    all_candidates = []
+
     filter_sets = [
-        {
-            "name": "strict",
-            "min_oi": 200,
-            "min_vol": 20,
-            "max_spread": 0.18,
-            "delta_min": 0.35,
-            "delta_max": 0.75,
-        },
-        {
-            "name": "medium",
-            "min_oi": 25,
-            "min_vol": 0,
-            "max_spread": 0.45,
-            "delta_min": 0.20,
-            "delta_max": 0.90,
-        },
-        {
-            "name": "loose",
-            "min_oi": 0,
-            "min_vol": 0,
-            "max_spread": 5.00,
-            "delta_min": 0.01,
-            "delta_max": 0.99,
-        },
+        {"name": "strict", "min_oi": 200, "min_vol": 20, "max_spread": 0.18, "delta_min": 0.35, "delta_max": 0.75},
+        {"name": "medium", "min_oi": 25, "min_vol": 0, "max_spread": 0.45, "delta_min": 0.20, "delta_max": 0.90},
+        {"name": "loose", "min_oi": 0, "min_vol": 0, "max_spread": 5.00, "delta_min": 0.01, "delta_max": 0.99},
     ]
 
-    for filters in filter_sets:
-        picks = []
+    for exp, dte in valid_dates:
+        try:
+            chain = ticker.option_chain(exp)
+            df = getattr(chain, option_side, None)
 
-        for exp, dte in valid_dates:
-            try:
-                chain = ticker.option_chain(exp)
-                df = getattr(chain, option_side, None)
+            if df is None or df.empty:
+                print(symbol, exp, scan_direction, "empty option chain")
+                continue
 
-                if df is None or df.empty:
-                    print(symbol, exp, scan_direction, "empty option chain")
-                    continue
+            df = normalize_option_chain_df(df, stock_price, dte, option_type)
 
-                df = df.copy()
+            if df.empty:
+                print(symbol, exp, scan_direction, "no contracts with price")
+                continue
 
-                print(symbol, exp, scan_direction, "raw rows:", len(df))
+            print(symbol, exp, scan_direction, "usable rows:", len(df))
 
-                df["bid"] = pd.to_numeric(df["bid"], errors="coerce").fillna(0.0)
-                df["ask"] = pd.to_numeric(df["ask"], errors="coerce").fillna(0.0)
-                df["lastPrice"] = pd.to_numeric(df["lastPrice"], errors="coerce").fillna(0.0)
-                df["volume"] = pd.to_numeric(df["volume"], errors="coerce").fillna(0).astype(int)
-                df["openInterest"] = pd.to_numeric(df["openInterest"], errors="coerce").fillna(0).astype(int)
-                df["impliedVolatility"] = pd.to_numeric(df["impliedVolatility"], errors="coerce").fillna(0.0)
-                df["strike"] = pd.to_numeric(df["strike"], errors="coerce").fillna(0.0)
-
-                df["mid"] = np.where(
-                    (df["bid"] > 0) & (df["ask"] > 0),
-                    (df["bid"] + df["ask"]) / 2,
-                    df["lastPrice"],
-                )
-
-                # Do not reject too aggressively
-                df = df[(df["mid"] > 0) | (df["lastPrice"] > 0)].copy()
-
-                if df.empty:
-                    print(symbol, exp, scan_direction, "no contracts with price")
-                    continue
-
-                df["spread_pct"] = np.where(
-                    df["mid"] > 0,
-                    (df["ask"] - df["bid"]).clip(lower=0) / df["mid"],
-                    999,
-                )
-
-                years_to_exp = max(dte, 1) / 365.0
-
-                df["delta_est"] = df.apply(
-                    lambda row: bs_delta(
-                        stock_price,
-                        float(row["strike"]),
-                        years_to_exp,
-                        RISK_FREE_RATE,
-                        max(float(row["impliedVolatility"]), 0.0001),
-                        option_type,
-                    ),
-                    axis=1,
-                )
-
-                before_filter = len(df)
-
-                df = df[
+            for filters in filter_sets:
+                fdf = df[
                     (df["openInterest"] >= filters["min_oi"])
                     & (df["volume"] >= filters["min_vol"])
                     & (df["spread_pct"] <= filters["max_spread"])
                 ].copy()
 
-                print(
-                    symbol,
-                    exp,
-                    scan_direction,
-                    filters["name"],
-                    "after liquidity/spread:",
-                    len(df),
-                    "from",
-                    before_filter
-                )
-
-                if df.empty:
-                    continue
-
                 if scan_direction == "CALL":
-                    df = df[
-                        (df["delta_est"] >= filters["delta_min"])
-                        & (df["delta_est"] <= filters["delta_max"])
+                    fdf = fdf[
+                        (fdf["delta_est"] >= filters["delta_min"])
+                        & (fdf["delta_est"] <= filters["delta_max"])
                     ].copy()
                 else:
-                    df = df[
-                        (df["delta_est"] <= -filters["delta_min"])
-                        & (df["delta_est"] >= -filters["delta_max"])
+                    fdf = fdf[
+                        (fdf["delta_est"] <= -filters["delta_min"])
+                        & (fdf["delta_est"] >= -filters["delta_max"])
                     ].copy()
 
-                print(
-                    symbol,
-                    exp,
-                    scan_direction,
-                    filters["name"],
-                    "after delta:",
-                    len(df)
-                )
-
-                if df.empty:
-                    continue
-
-                df["score"] = df.apply(
-                    lambda row: score_option_row(row, stock_price, dte),
-                    axis=1
-                )
-
-                df = df.sort_values("score", ascending=False)
-
-                for _, row in df.head(5).iterrows():
-                    mid = round(float(row["mid"]), 2)
-
-                    picks.append(
-                        {
-                            "direction": scan_direction,
-                            "contract_symbol": str(row.get("contractSymbol", "")),
-                            "expiration": exp,
-                            "dte": dte,
-                            "strike": round(float(row["strike"]), 2),
-                            "bid": round(float(row["bid"]), 2),
-                            "ask": round(float(row["ask"]), 2),
-                            "mid": mid,
-                            "last": round(float(row["lastPrice"]), 2),
-                            "volume": int(row["volume"]),
-                            "open_interest": int(row["openInterest"]),
-                            "iv": round(float(row["impliedVolatility"]) * 100, 2),
-                            "delta_est": round(float(row["delta_est"]), 3),
-                            "spread_pct": round(float(row["spread_pct"]) * 100, 2),
-                            "option_stop": round(mid * (1 - OPTION_STOP_PCT), 2),
-                            "option_target": round(mid * (1 + OPTION_TARGET_PCT), 2),
-                            "score": round(float(row["score"]), 3),
-                            "why": build_option_why(row, dte, filters["name"]),
-                            "filter_used": filters["name"],
-                        }
+                if not fdf.empty:
+                    fdf = fdf.sort_values(
+                        by=["score", "openInterest", "volume", "distance_from_price"],
+                        ascending=[False, False, False, True],
                     )
 
-            except Exception as e:
-                print(f"OPTION PROCESSING ERROR for {symbol} {exp} {scan_direction}:", e)
+                    for _, row in fdf.head(5).iterrows():
+                        all_candidates.append(row_to_pick(row, scan_direction, exp, dte, filters["name"]))
 
-        if picks:
-            print(f"OPTION FILTER USED for {symbol} {scan_direction}:", filters["name"])
-            picks.sort(key=lambda x: x["score"], reverse=True)
-            return picks
+            fallback_df = df.sort_values(
+                by=["score", "openInterest", "volume", "distance_from_price"],
+                ascending=[False, False, False, True],
+            )
 
-    return []
+            for _, row in fallback_df.head(3).iterrows():
+                all_candidates.append(row_to_pick(row, scan_direction, exp, dte, "fallback"))
+
+        except Exception as e:
+            print(f"OPTION PROCESSING ERROR for {symbol} {exp} {scan_direction}:", e)
+
+    all_candidates.sort(key=lambda x: x["score"], reverse=True)
+
+    deduped = []
+    seen = set()
+
+    for pick in all_candidates:
+        key = pick.get("contract_symbol") or f"{pick['direction']}-{pick['expiration']}-{pick['strike']}"
+        if key not in seen:
+            deduped.append(pick)
+            seen.add(key)
+
+    return deduped[:TOP_OPTION_PICKS]
 
 
 def get_best_options(symbol: str, signal: dict):
@@ -599,7 +558,6 @@ def get_best_options(symbol: str, signal: dict):
 
     all_picks = []
 
-    # Always scan both sides so the table always has CALL or PUT suggestions
     for scan_direction in ["CALL", "PUT"]:
         picks = collect_option_picks_for_direction(
             ticker=ticker,
@@ -618,12 +576,12 @@ def get_best_options(symbol: str, signal: dict):
 
     for pick in all_picks:
         key = pick.get("contract_symbol") or f"{pick['direction']}-{pick['expiration']}-{pick['strike']}"
-
         if key not in seen:
             deduped.append(pick)
             seen.add(key)
 
     return deduped[:TOP_OPTION_PICKS]
+
 
 def format_candles(df: pd.DataFrame):
     candles = []
@@ -749,6 +707,7 @@ def build_scan(symbol: str):
 
     return {
         "symbol": symbol,
+        "version": APP_VERSION,
         "signal": signal,
         "options": options,
         "best_option": options[0] if options else None,
@@ -764,6 +723,57 @@ def home():
     return render_template("index.html")
 
 
+@app.route("/version")
+def version():
+    return jsonify(
+        {
+            "version": APP_VERSION,
+            "min_dte": MIN_DTE,
+            "max_dte": MAX_DTE,
+            "top_option_picks": TOP_OPTION_PICKS,
+        }
+    )
+
+
+@app.route("/debug-options")
+def debug_options():
+    symbol = normalize_symbol(request.args.get("symbol", DEFAULT_SYMBOL))
+
+    try:
+        ticker = yf.Ticker(symbol)
+        expirations = list(ticker.options)
+
+        result = {
+            "symbol": symbol,
+            "version": APP_VERSION,
+            "min_dte": MIN_DTE,
+            "max_dte": MAX_DTE,
+            "expiration_count": len(expirations),
+            "expirations": expirations[:10],
+        }
+
+        if expirations:
+            exp = expirations[0]
+            chain = ticker.option_chain(exp)
+
+            result["test_expiration"] = exp
+            result["calls_count"] = len(chain.calls)
+            result["puts_count"] = len(chain.puts)
+            result["sample_calls"] = chain.calls.head(3).to_dict("records")
+            result["sample_puts"] = chain.puts.head(3).to_dict("records")
+
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify(
+            {
+                "symbol": symbol,
+                "version": APP_VERSION,
+                "error": str(e),
+            }
+        ), 500
+
+
 @app.route("/scan")
 def scan():
     symbol = normalize_symbol(request.args.get("symbol", DEFAULT_SYMBOL))
@@ -772,6 +782,7 @@ def scan():
         data = build_scan(symbol)
 
         print("SCAN OK")
+        print("Version:", APP_VERSION)
         print("Symbol:", symbol)
         print("Signal:", data["signal"]["direction"])
         print("Score:", data["signal"]["score"])
@@ -783,7 +794,7 @@ def scan():
 
     except Exception as e:
         print(f"SCAN ERROR for {symbol}:", str(e))
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e), "version": APP_VERSION}), 500
 
 
 @app.route("/quote")
@@ -804,6 +815,7 @@ def quote():
                 "success": True,
                 "symbol": symbol,
                 "price": round(price, 2),
+                "version": APP_VERSION,
             }
         )
 
@@ -812,6 +824,7 @@ def quote():
             {
                 "success": False,
                 "error": str(e),
+                "version": APP_VERSION,
             }
         ), 500
 
