@@ -856,55 +856,13 @@ def version():
 
 @app.route("/debug-options")
 def debug_options():
-    symbol = normalize_symbol(request.args.get("symbol", DEFAULT_SYMBOL))
-
-    result = {
-        "symbol": symbol,
+    return jsonify({
+        "status": "route works",
         "version": APP_VERSION,
         "min_dte": MIN_DTE,
-        "max_dte": MAX_DTE,
-        "step": "started"
-    }
+        "max_dte": MAX_DTE
+    })
 
-    try:
-        ticker = yf.Ticker(symbol)
-        result["step"] = "ticker_created"
-
-        try:
-            expirations = list(ticker.options)
-            result["step"] = "got_expirations"
-            result["expiration_count"] = len(expirations)
-            result["expirations"] = expirations[:10]
-        except Exception as e:
-            result["step"] = "expiration_error"
-            result["error"] = str(e)
-            return jsonify(result), 200
-
-        if not expirations:
-            result["step"] = "no_expirations"
-            return jsonify(result), 200
-
-        exp = expirations[0]
-        result["test_expiration"] = exp
-
-        try:
-            chain = ticker.option_chain(exp)
-            result["step"] = "got_option_chain"
-            result["calls_count"] = int(len(chain.calls))
-            result["puts_count"] = int(len(chain.puts))
-        except Exception as e:
-            result["step"] = "option_chain_error"
-            result["error"] = str(e)
-            return jsonify(result), 200
-
-        return jsonify(result), 200
-
-    except Exception as e:
-        result["step"] = "fatal_error"
-        result["error"] = str(e)
-        return jsonify(result), 200
-    
-    
 @app.route("/scan")
 def scan():
     symbol = normalize_symbol(request.args.get("symbol", "SPY"))
