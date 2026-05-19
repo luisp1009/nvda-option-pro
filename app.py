@@ -875,21 +875,25 @@ def debug_options():
             exp = expirations[0]
             chain = ticker.option_chain(exp)
 
+            calls = chain.calls.copy()
+            puts = chain.puts.copy()
+
             result["test_expiration"] = exp
-            result["calls_count"] = len(chain.calls)
-            result["puts_count"] = len(chain.puts)
-            result["sample_calls"] = chain.calls.head(3).to_dict("records")
-            result["sample_puts"] = chain.puts.head(3).to_dict("records")
+            result["calls_count"] = int(len(calls))
+            result["puts_count"] = int(len(puts))
+
+            result["sample_calls"] = calls.head(3).astype(str).to_dict("records")
+            result["sample_puts"] = puts.head(3).astype(str).to_dict("records")
 
         return jsonify(result)
 
     except Exception as e:
+        print("DEBUG OPTIONS ERROR:", str(e))
         return jsonify({
             "symbol": symbol,
             "version": APP_VERSION,
             "error": str(e),
         }), 500
-    
 
 @app.route("/scan")
 def scan():
