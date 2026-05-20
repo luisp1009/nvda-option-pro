@@ -998,7 +998,9 @@ def collect_option_picks_from_df(df: pd.DataFrame, scan_direction: str, exp: str
 
 
 def get_best_options(symbol: str, signal: dict, market_status: str):
-    cache_key = f"best_options:{symbol}"
+    signal_direction = signal.get("direction", "NO TRADE")
+
+    cache_key = f"best_options:{symbol}:{signal_direction}"
     cached = cache_get(OPTIONS_CACHE, cache_key, OPTIONS_CACHE_SECONDS)
     if cached is not None:
         return cached
@@ -1008,10 +1010,16 @@ def get_best_options(symbol: str, signal: dict, market_status: str):
     if stock_price <= 0:
         return []
 
-    # Always scan both sides so you always get a call or put list.
-    directions_to_scan = ["CALL", "PUT"]
-    all_picks = []
+    # Match contracts to signal direction.
+    # If no trade, show both sides.
+    if signal_direction == "CALL":
+        directions_to_scan = ["CALL"]
+    elif signal_direction == "PUT":
+        directions_to_scan = ["PUT"]
+    else:
+        directions_to_scan = ["CALL", "PUT"]
 
+    all_picks = []
     provider_used = "none"
 
     # First choice: Tradier
@@ -1037,22 +1045,27 @@ def get_best_options(symbol: str, signal: dict, market_status: str):
                         provider="tradier",
                     )
 
-                    all_picks.extend(
-                        collect_option_picks_from_df(
-                            side_df,
-                            scan_direction=scan_direction,
-                            exp=exp,
-                            dte=dte,
-                            provider="tradier",
-                        )
+                    picks = collect_option_picks_from_df(
+                        side_df,
+                        scan_direction=scan_direction,
+                        exp=exp,
+                        dte=dte,
+                        provider="tradier",
                     )
+
+                    picks = [
+                        p for p in picks
+                        if p.get("direction") == scan_direction
+                    ]
+
+                    all_picks.extend(picks)
 
             provider_used = "tradier"
 
         except Exception as e:
             print(f"TRADIER OPTIONS ERROR for {symbol}:", e)
 
-    # Fallback: yfinance, but cached and limited
+    # Fallback: yfinance
     if not all_picks:
         try:
             ticker = yf.Ticker(symbol)
@@ -1075,15 +1088,20 @@ def get_best_options(symbol: str, signal: dict, market_status: str):
                         provider="yahoo",
                     )
 
-                    all_picks.extend(
-                        collect_option_picks_from_df(
-                            side_df,
-                            scan_direction=scan_direction,
-                            exp=exp,
-                            dte=dte,
-                            provider="yahoo",
-                        )
+                    picks = collect_option_picks_from_df(
+                        side_df,
+                        scan_direction=scan_direction,
+                        exp=exp,
+                        dte=dte,
+                        provider="yahoo",
                     )
+
+                    picks = [
+                        p for p in picks
+                        if p.get("direction") == scan_direction
+                    ]
+
+                    all_picks.extend(picks)
 
             provider_used = "yahoo"
 
@@ -1097,6 +1115,7 @@ def get_best_options(symbol: str, signal: dict, market_status: str):
 
     for pick in all_picks:
         key = pick.get("contract_symbol") or f"{pick['direction']}-{pick['expiration']}-{pick['strike']}"
+
         if key not in seen:
             pick["provider_used"] = provider_used
             deduped.append(pick)
