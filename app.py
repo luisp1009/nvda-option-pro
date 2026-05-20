@@ -1,18 +1,28 @@
 import math
+import os
+import time as time_module
 from datetime import datetime, date, time
 from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
+import requests
 import yfinance as yf
 from flask import Flask, jsonify, render_template, request
 
 app = Flask(__name__)
 
+APP_VERSION = "tradier-options-cache-v1"
+
 DEFAULT_SYMBOLS = ["SPY", "NVDA", "AAPL", "MSFT", "TSLA", "AMD", "AMZN", "META", "QQQ"]
 
+# Wider range so contracts are easier to find
 MIN_DTE = 1
 MAX_DTE = 60
+
+# Limit option-chain API calls per scan to avoid rate limits
+MAX_EXPIRATIONS_TO_SCAN = 3
+
 RISK_FREE_RATE = 0.045
 
 ATR_LEN = 14
@@ -30,12 +40,61 @@ TOP_OPTION_PICKS = 8
 
 EASTERN = ZoneInfo("America/New_York")
 
+# Browser can refresh every 15 seconds, but Render only calls data providers every 5 minutes per symbol.
+SCAN_CACHE = {}
+QUOTE_CACHE = {}
+OPTIONS_CACHE = {}
+CACHE_SECONDS = int(os.getenv("CACHE_SECONDS", "300"))
+QUOTE_CACHE_SECONDS = int(os.getenv("QUOTE_CACHE_SECONDS", "60"))
+OPTIONS_CACHE_SECONDS = int(os.getenv("OPTIONS_CACHE_SECONDS", "300"))
+
+# Tradier token must be set in Render Environment Variables.
+# Name: TRADIER_TOKEN
+TRADIER_TOKEN = os.getenv("TRADIER_TOKEN", "").strip()
+TRADIER_BASE_URL = os.getenv("TRADIER_BASE_URL", "https://api.tradier.com/v1").rstrip("/")
+
 
 def normalize_symbol(symbol: str) -> str:
     symbol = (symbol or "SPY").upper().strip()
     symbol = symbol.replace("$", "").replace(" ", "")
     symbol = symbol.replace(".", "-")
     return symbol or "SPY"
+
+
+def cache_get(cache: dict, key: str, max_age: int):
+    item = cache.get(key)
+    if not item:
+        return None
+
+    age = (datetime.now(EASTERN) - item["time"]).total_seconds()
+    if age <= max_age:
+        return item["data"]
+
+    return None
+
+
+def cache_set(cache: dict, key: str, data):
+    cache[key] = {
+        "time": datetime.now(EASTERN),
+        "data": data,
+    }
+
+
+def safe_float(value, default=0.0) -> float:
+    try:
+        value = float(value)
+        if math.isnan(value) or math.isinf(value):
+            return default
+        return value
+    except Exception:
+        return default
+
+
+def safe_int(value, default=0) -> int:
+    try:
+        return int(float(value))
+    except Exception:
+        return default
 
 
 def ema(series: pd.Series, length: int) -> pd.Series:
@@ -130,6 +189,11 @@ def market_session_info(now_et: datetime):
 
 
 def get_news(symbol: str):
+    cache_key = f"news:{symbol}"
+    cached = cache_get(QUOTE_CACHE, cache_key, CACHE_SECONDS)
+    if cached is not None:
+        return cached
+
     ticker = yf.Ticker(symbol)
 
     try:
@@ -204,10 +268,16 @@ def get_news(symbol: str):
         except Exception as e:
             print(f"NEWS ITEM ERROR for {symbol}:", e)
 
+    cache_set(QUOTE_CACHE, cache_key, items)
     return items
 
 
 def get_price_data(symbol: str):
+    cache_key = f"price_data:{symbol}"
+    cached = cache_get(QUOTE_CACHE, cache_key, CACHE_SECONDS)
+    if cached is not None:
+        return cached
+
     fast = yf.download(
         symbol,
         period="5d",
@@ -215,6 +285,7 @@ def get_price_data(symbol: str):
         auto_adjust=False,
         progress=False,
         prepost=True,
+        threads=False,
     )
 
     if fast.empty:
@@ -225,6 +296,7 @@ def get_price_data(symbol: str):
             auto_adjust=False,
             progress=False,
             prepost=True,
+            threads=False,
         )
 
     slow = yf.download(
@@ -234,6 +306,7 @@ def get_price_data(symbol: str):
         auto_adjust=False,
         progress=False,
         prepost=True,
+        threads=False,
     )
 
     fast = flatten_columns(fast).dropna().copy()
@@ -250,6 +323,7 @@ def get_price_data(symbol: str):
 
     fast["vwap"] = intraday_vwap(fast)
 
+    cache_set(QUOTE_CACHE, cache_key, (fast, slow))
     return fast, slow
 
 
@@ -515,14 +589,160 @@ def explain_trade(signal: dict) -> dict:
     }
 
 
-def option_dates_in_range(ticker, min_dte: int, max_dte: int):
+# ---------------------------
+# Tradier options provider
+# ---------------------------
+
+def tradier_enabled() -> bool:
+    return bool(TRADIER_TOKEN)
+
+
+def tradier_headers():
+    return {
+        "Authorization": f"Bearer {TRADIER_TOKEN}",
+        "Accept": "application/json",
+    }
+
+
+def tradier_get(path: str, params: dict):
+    if not tradier_enabled():
+        raise RuntimeError("TRADIER_TOKEN is not set.")
+
+    url = f"{TRADIER_BASE_URL}{path}"
+    response = requests.get(url, headers=tradier_headers(), params=params, timeout=12)
+
+    if response.status_code == 429:
+        raise RuntimeError("Tradier rate limit hit. Returning cached/fallback data if available.")
+
+    if response.status_code >= 400:
+        raise RuntimeError(f"Tradier error {response.status_code}: {response.text[:300]}")
+
+    return response.json()
+
+
+def normalize_to_list(value):
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    return [value]
+
+
+def tradier_option_dates_in_range(symbol: str, min_dte: int, max_dte: int):
+    cache_key = f"tradier_exp:{symbol}:{min_dte}:{max_dte}"
+    cached = cache_get(OPTIONS_CACHE, cache_key, OPTIONS_CACHE_SECONDS)
+    if cached is not None:
+        return cached
+
+    today = date.today()
+    valid = []
+
+    data = tradier_get(
+        "/markets/options/expirations",
+        {
+            "symbol": symbol,
+            "includeAllRoots": "false",
+            "strikes": "false",
+        },
+    )
+
+    raw_dates = data.get("expirations", {}).get("date", [])
+    for exp in normalize_to_list(raw_dates):
+        try:
+            exp_date = datetime.strptime(str(exp), "%Y-%m-%d").date()
+            dte = (exp_date - today).days
+            if min_dte <= dte <= max_dte:
+                valid.append((str(exp), dte))
+        except Exception:
+            continue
+
+    cache_set(OPTIONS_CACHE, cache_key, valid)
+    return valid
+
+
+def tradier_chain_df(symbol: str, expiration: str):
+    cache_key = f"tradier_chain:{symbol}:{expiration}"
+    cached = cache_get(OPTIONS_CACHE, cache_key, OPTIONS_CACHE_SECONDS)
+    if cached is not None:
+        return cached.copy()
+
+    data = tradier_get(
+        "/markets/options/chains",
+        {
+            "symbol": symbol,
+            "expiration": expiration,
+            "greeks": "true",
+        },
+    )
+
+    raw_options = data.get("options", {}).get("option", [])
+    rows = normalize_to_list(raw_options)
+
+    normalized = []
+
+    for item in rows:
+        if not isinstance(item, dict):
+            continue
+
+        greeks = item.get("greeks") or {}
+
+        option_type = str(item.get("option_type") or item.get("type") or "").lower()
+        if option_type not in {"call", "put"}:
+            description = str(item.get("description") or "").lower()
+            if " call" in description:
+                option_type = "call"
+            elif " put" in description:
+                option_type = "put"
+
+        bid = safe_float(item.get("bid"), 0.0)
+        ask = safe_float(item.get("ask"), 0.0)
+        last = safe_float(item.get("last"), 0.0)
+
+        mid = (bid + ask) / 2 if bid > 0 and ask > 0 else last
+
+        normalized.append(
+            {
+                "contractSymbol": item.get("symbol") or item.get("contract_symbol") or "",
+                "option_type": option_type,
+                "strike": safe_float(item.get("strike"), 0.0),
+                "bid": bid,
+                "ask": ask,
+                "lastPrice": last,
+                "mid": mid,
+                "volume": safe_int(item.get("volume"), 0),
+                "openInterest": safe_int(item.get("open_interest") or item.get("openInterest"), 0),
+                "impliedVolatility": safe_float(
+                    item.get("implied_volatility")
+                    or item.get("iv")
+                    or greeks.get("mid_iv")
+                    or greeks.get("iv"),
+                    0.0,
+                ),
+                "delta_est": safe_float(greeks.get("delta"), float("nan")),
+            }
+        )
+
+    df = pd.DataFrame(normalized)
+
+    if df.empty:
+        return df
+
+    cache_set(OPTIONS_CACHE, cache_key, df)
+    return df.copy()
+
+
+# ---------------------------
+# Yahoo fallback provider
+# ---------------------------
+
+def yahoo_option_dates_in_range(ticker, min_dte: int, max_dte: int):
     valid = []
     today = date.today()
 
     try:
         expirations = ticker.options
     except Exception as e:
-        print("OPTIONS LIST ERROR:", e)
+        print("YAHOO OPTIONS LIST ERROR:", e)
         return valid
 
     for exp in expirations:
@@ -539,21 +759,39 @@ def option_dates_in_range(ticker, min_dte: int, max_dte: int):
     return valid
 
 
-def score_option_row(row: pd.Series, stock_price: float, dte: int) -> float:
-    mid = float(row["mid"])
-    spread_pct = float(row["spread_pct"])
-    oi = int(row["openInterest"])
-    vol = int(row["volume"])
-    strike = float(row["strike"])
+def yahoo_chain_df(ticker, symbol: str, expiration: str, option_side: str):
+    time_module.sleep(0.35)
 
-    delta_abs = abs(float(row["delta_est"])) if not math.isnan(float(row["delta_est"])) else 0.0
+    chain = ticker.option_chain(expiration)
+    df = getattr(chain, option_side, None)
+
+    if df is None or df.empty:
+        return pd.DataFrame()
+
+    df = df.copy()
+    df["option_type"] = "call" if option_side == "calls" else "put"
+    return df
+
+
+# ---------------------------
+# Options scoring
+# ---------------------------
+
+def score_option_row(row: pd.Series, stock_price: float, dte: int) -> float:
+    mid = safe_float(row.get("mid"), 0.0)
+    spread_pct = safe_float(row.get("spread_pct"), 9.99)
+    oi = safe_int(row.get("openInterest"), 0)
+    vol = safe_int(row.get("volume"), 0)
+    strike = safe_float(row.get("strike"), 0.0)
+
+    delta_abs = abs(safe_float(row.get("delta_est"), 0.0))
 
     liquidity_score = min(oi / 1000, 1.5) + min(vol / 300, 1.0)
-    spread_score = max(0.0, 1.4 - spread_pct * 4)
-    moneyness_score = max(0.0, 1.7 - abs(strike - stock_price) / max(stock_price * 0.04, 1))
-    delta_score = max(0.0, 1.7 - abs(delta_abs - 0.55) * 3)
-    dte_score = max(0.0, 1.3 - abs(dte - 21) / 18)
-    premium_penalty = 0.0 if 0.25 <= mid <= 80 else 0.4
+    spread_score = max(0.0, 1.4 - spread_pct * 3)
+    moneyness_score = max(0.0, 1.8 - abs(strike - stock_price) / max(stock_price * 0.05, 1))
+    delta_score = max(0.0, 1.7 - abs(delta_abs - 0.55) * 2.5)
+    dte_score = max(0.0, 1.4 - abs(dte - 21) / 25)
+    premium_score = 1.0 if 0.10 <= mid <= 100 else 0.25
 
     return round(
         liquidity_score
@@ -561,17 +799,23 @@ def score_option_row(row: pd.Series, stock_price: float, dte: int) -> float:
         + moneyness_score
         + delta_score
         + dte_score
-        - premium_penalty,
+        + premium_score,
         4,
     )
 
 
-def build_option_why(row: pd.Series, dte: int) -> str:
+def build_option_why(row: pd.Series, dte: int, provider: str, filter_used: str) -> str:
     notes = []
 
-    vol = int(row.get("volume", 0))
-    oi = int(row.get("openInterest", 0))
-    spread = float(row.get("spread_pct", 999))
+    vol = safe_int(row.get("volume"), 0)
+    oi = safe_int(row.get("openInterest"), 0)
+    spread = safe_float(row.get("spread_pct"), 9.99)
+    delta = safe_float(row.get("delta_est"), 0.0)
+
+    if provider == "tradier":
+        notes.append("Tradier data")
+    else:
+        notes.append("Yahoo fallback")
 
     if vol >= 100:
         notes.append("good volume")
@@ -584,178 +828,267 @@ def build_option_why(row: pd.Series, dte: int) -> str:
         notes.append("solid OI")
     elif oi >= 50:
         notes.append("usable OI")
-    elif oi > 0:
+    else:
         notes.append("low OI")
 
-    if spread <= 0.08:
+    if spread <= 0.10:
         notes.append("tight spread")
-    elif spread <= 0.25:
+    elif spread <= 0.35:
         notes.append("acceptable spread")
     else:
         notes.append("wide spread")
 
-    if 14 <= dte <= 28:
+    if 14 <= dte <= 35:
         notes.append("good DTE")
-    elif 7 <= dte <= 35:
+    else:
         notes.append("valid DTE")
+
+    if abs(delta) >= 0.40:
+        notes.append("stronger delta")
+    elif abs(delta) >= 0.20:
+        notes.append("usable delta")
+    else:
+        notes.append("low delta")
+
+    notes.append(filter_used)
 
     return ", ".join(notes)
 
 
-def collect_option_picks_for_direction(ticker, symbol, scan_direction, stock_price, valid_dates):
-    option_side = "calls" if scan_direction == "CALL" else "puts"
-    option_type = "call" if scan_direction == "CALL" else "put"
+def normalize_options_df(df: pd.DataFrame, stock_price: float, dte: int, scan_direction: str, provider: str):
+    if df is None or df.empty:
+        return pd.DataFrame()
+
+    df = df.copy()
+
+    needed = ["bid", "ask", "lastPrice", "volume", "openInterest", "impliedVolatility", "strike", "contractSymbol"]
+    for col in needed:
+        if col not in df.columns:
+            df[col] = 0
+
+    df["bid"] = pd.to_numeric(df["bid"], errors="coerce").fillna(0.0)
+    df["ask"] = pd.to_numeric(df["ask"], errors="coerce").fillna(0.0)
+    df["lastPrice"] = pd.to_numeric(df["lastPrice"], errors="coerce").fillna(0.0)
+    df["volume"] = pd.to_numeric(df["volume"], errors="coerce").fillna(0).astype(int)
+    df["openInterest"] = pd.to_numeric(df["openInterest"], errors="coerce").fillna(0).astype(int)
+    df["impliedVolatility"] = pd.to_numeric(df["impliedVolatility"], errors="coerce").fillna(0.0)
+    df["strike"] = pd.to_numeric(df["strike"], errors="coerce").fillna(0.0)
+
+    if "mid" not in df.columns:
+        df["mid"] = np.where(
+            (df["bid"] > 0) & (df["ask"] > 0),
+            (df["bid"] + df["ask"]) / 2,
+            df["lastPrice"],
+        )
+    else:
+        df["mid"] = pd.to_numeric(df["mid"], errors="coerce").fillna(0.0)
+
+    df = df[(df["mid"] > 0) | (df["lastPrice"] > 0)].copy()
+
+    if df.empty:
+        return df
+
+    df["spread_pct"] = np.where(
+        df["mid"] > 0,
+        (df["ask"] - df["bid"]).clip(lower=0) / df["mid"],
+        9.99,
+    )
+
+    if "delta_est" not in df.columns or df["delta_est"].isna().all():
+        option_type = "call" if scan_direction == "CALL" else "put"
+        years_to_exp = max(dte, 1) / 365.0
+
+        df["delta_est"] = df.apply(
+            lambda row: bs_delta(
+                stock_price,
+                float(row["strike"]),
+                years_to_exp,
+                RISK_FREE_RATE,
+                max(float(row["impliedVolatility"]), 0.0001),
+                option_type,
+            ),
+            axis=1,
+        )
+
+    df["distance_from_price"] = (df["strike"] - stock_price).abs()
+    df["score"] = df.apply(lambda row: score_option_row(row, stock_price, dte), axis=1)
+    df["provider"] = provider
+
+    return df
+
+
+def row_to_pick(row: pd.Series, scan_direction: str, exp: str, dte: int, provider: str, filter_used: str):
+    mid = round(safe_float(row.get("mid"), 0.0), 2)
+
+    return {
+        "direction": scan_direction,
+        "contract_symbol": str(row.get("contractSymbol", "")),
+        "expiration": exp,
+        "dte": dte,
+        "strike": round(safe_float(row.get("strike"), 0.0), 2),
+        "bid": round(safe_float(row.get("bid"), 0.0), 2),
+        "ask": round(safe_float(row.get("ask"), 0.0), 2),
+        "mid": mid,
+        "last": round(safe_float(row.get("lastPrice"), 0.0), 2),
+        "volume": safe_int(row.get("volume"), 0),
+        "open_interest": safe_int(row.get("openInterest"), 0),
+        "iv": round(safe_float(row.get("impliedVolatility"), 0.0) * 100, 2),
+        "delta_est": round(safe_float(row.get("delta_est"), 0.0), 3),
+        "spread_pct": round(safe_float(row.get("spread_pct"), 9.99) * 100, 2),
+        "option_stop": round(mid * (1 - OPTION_STOP_PCT), 2),
+        "option_target": round(mid * (1 + OPTION_TARGET_PCT), 2),
+        "score": round(safe_float(row.get("score"), 0.0), 3),
+        "why": build_option_why(row, dte, provider, filter_used),
+        "filter_used": filter_used,
+        "provider": provider,
+    }
+
+
+def collect_option_picks_from_df(df: pd.DataFrame, scan_direction: str, exp: str, dte: int, provider: str):
+    if df.empty:
+        return []
+
+    picks = []
 
     filter_sets = [
         {"name": "strict", "min_oi": 200, "min_vol": 20, "max_spread": 0.18, "delta_min": 0.35, "delta_max": 0.75},
-        {"name": "medium", "min_oi": 50, "min_vol": 1, "max_spread": 0.30, "delta_min": 0.25, "delta_max": 0.85},
-        {"name": "loose", "min_oi": 0, "min_vol": 0, "max_spread": 0.60, "delta_min": 0.15, "delta_max": 0.95},
+        {"name": "medium", "min_oi": 25, "min_vol": 0, "max_spread": 0.45, "delta_min": 0.20, "delta_max": 0.90},
+        {"name": "loose", "min_oi": 0, "min_vol": 0, "max_spread": 5.00, "delta_min": 0.01, "delta_max": 0.99},
     ]
 
     for filters in filter_sets:
-        picks = []
+        fdf = df[
+            (df["openInterest"] >= filters["min_oi"])
+            & (df["volume"] >= filters["min_vol"])
+            & (df["spread_pct"] <= filters["max_spread"])
+        ].copy()
 
-        for exp, dte in valid_dates:
-            try:
-                chain = ticker.option_chain(exp)
-                df = getattr(chain, option_side, None)
+        if scan_direction == "CALL":
+            fdf = fdf[
+                (fdf["delta_est"] >= filters["delta_min"])
+                & (fdf["delta_est"] <= filters["delta_max"])
+            ].copy()
+        else:
+            fdf = fdf[
+                (fdf["delta_est"] <= -filters["delta_min"])
+                & (fdf["delta_est"] >= -filters["delta_max"])
+            ].copy()
 
-                if df is None or df.empty:
-                    continue
+        if not fdf.empty:
+            fdf = fdf.sort_values(
+                by=["score", "openInterest", "volume", "distance_from_price"],
+                ascending=[False, False, False, True],
+            )
 
-                df = df.copy()
+            for _, row in fdf.head(4).iterrows():
+                picks.append(row_to_pick(row, scan_direction, exp, dte, provider, filters["name"]))
 
-                df["bid"] = pd.to_numeric(df["bid"], errors="coerce").fillna(0.0)
-                df["ask"] = pd.to_numeric(df["ask"], errors="coerce").fillna(0.0)
-                df["lastPrice"] = pd.to_numeric(df["lastPrice"], errors="coerce").fillna(0.0)
-                df["volume"] = pd.to_numeric(df["volume"], errors="coerce").fillna(0).astype(int)
-                df["openInterest"] = pd.to_numeric(df["openInterest"], errors="coerce").fillna(0).astype(int)
-                df["impliedVolatility"] = pd.to_numeric(df["impliedVolatility"], errors="coerce").fillna(0.0)
-                df["strike"] = pd.to_numeric(df["strike"], errors="coerce").fillna(0.0)
-
-                df["mid"] = np.where(
-                    (df["bid"] > 0) & (df["ask"] > 0),
-                    (df["bid"] + df["ask"]) / 2,
-                    df["lastPrice"],
-                )
-
-                df = df[df["mid"] > 0]
-
-                if df.empty:
-                    continue
-
-                df["spread_pct"] = np.where(
-                    df["mid"] > 0,
-                    (df["ask"] - df["bid"]).clip(lower=0) / df["mid"],
-                    999,
-                )
-
-                years_to_exp = max(dte, 1) / 365.0
-
-                df["delta_est"] = df.apply(
-                    lambda row: bs_delta(
-                        stock_price,
-                        float(row["strike"]),
-                        years_to_exp,
-                        RISK_FREE_RATE,
-                        max(float(row["impliedVolatility"]), 0.0001),
-                        option_type,
-                    ),
-                    axis=1,
-                )
-
-                df = df[
-                    (df["openInterest"] >= filters["min_oi"])
-                    & (df["volume"] >= filters["min_vol"])
-                    & (df["spread_pct"] <= filters["max_spread"])
-                ].copy()
-
-                if scan_direction == "CALL":
-                    df = df[
-                        (df["delta_est"] >= filters["delta_min"])
-                        & (df["delta_est"] <= filters["delta_max"])
-                    ]
-                else:
-                    df = df[
-                        (df["delta_est"] <= -filters["delta_min"])
-                        & (df["delta_est"] >= -filters["delta_max"])
-                    ]
-
-                if df.empty:
-                    continue
-
-                df["score"] = df.apply(lambda row: score_option_row(row, stock_price, dte), axis=1)
-                df = df.sort_values("score", ascending=False)
-
-                for _, row in df.head(5).iterrows():
-                    mid = round(float(row["mid"]), 2)
-
-                    picks.append(
-                        {
-                            "direction": scan_direction,
-                            "contract_symbol": str(row.get("contractSymbol", "")),
-                            "expiration": exp,
-                            "dte": dte,
-                            "strike": round(float(row["strike"]), 2),
-                            "bid": round(float(row["bid"]), 2),
-                            "ask": round(float(row["ask"]), 2),
-                            "mid": mid,
-                            "last": round(float(row["lastPrice"]), 2),
-                            "volume": int(row["volume"]),
-                            "open_interest": int(row["openInterest"]),
-                            "iv": round(float(row["impliedVolatility"]) * 100, 2),
-                            "delta_est": round(float(row["delta_est"]), 3),
-                            "spread_pct": round(float(row["spread_pct"]) * 100, 2),
-                            "option_stop": round(mid * (1 - OPTION_STOP_PCT), 2),
-                            "option_target": round(mid * (1 + OPTION_TARGET_PCT), 2),
-                            "score": round(float(row["score"]), 3),
-                            "why": build_option_why(row, dte),
-                            "filter_used": filters["name"],
-                        }
-                    )
-
-            except Exception as e:
-                print(f"OPTION PROCESSING ERROR for {symbol} {exp} {scan_direction}:", e)
-
-        if picks:
-            print(f"OPTION FILTER USED for {symbol} {scan_direction}:", filters["name"])
             return picks
 
-    return []
+    # Final fallback: show closest usable contracts even if Greeks/liquidity are not ideal.
+    fallback_df = df.sort_values(
+        by=["score", "openInterest", "volume", "distance_from_price"],
+        ascending=[False, False, False, True],
+    )
+
+    for _, row in fallback_df.head(4).iterrows():
+        picks.append(row_to_pick(row, scan_direction, exp, dte, provider, "fallback"))
+
+    return picks
 
 
 def get_best_options(symbol: str, signal: dict, market_status: str):
-    ticker = yf.Ticker(symbol)
+    cache_key = f"best_options:{symbol}"
+    cached = cache_get(OPTIONS_CACHE, cache_key, OPTIONS_CACHE_SECONDS)
+    if cached is not None:
+        return cached
+
     stock_price = float(signal.get("stock_price") or 0)
 
     if stock_price <= 0:
         return []
 
-    signal_direction = signal.get("direction", "NO TRADE")
-
-    if signal_direction in {"CALL", "PUT"}:
-        directions_to_scan = [signal_direction]
-    else:
-        directions_to_scan = ["CALL", "PUT"]
-
-    valid_dates = option_dates_in_range(ticker, MIN_DTE, MAX_DTE)
-
-    if not valid_dates:
-        print(f"NO VALID EXPIRATIONS FOUND FOR {symbol}")
-        return []
-
+    # Always scan both sides so you always get a call or put list.
+    directions_to_scan = ["CALL", "PUT"]
     all_picks = []
 
-    for scan_direction in directions_to_scan:
-        all_picks.extend(
-            collect_option_picks_for_direction(
-                ticker=ticker,
-                symbol=symbol,
-                scan_direction=scan_direction,
-                stock_price=stock_price,
-                valid_dates=valid_dates,
-            )
-        )
+    provider_used = "none"
+
+    # First choice: Tradier
+    if tradier_enabled():
+        try:
+            valid_dates = tradier_option_dates_in_range(symbol, MIN_DTE, MAX_DTE)
+            valid_dates = valid_dates[:MAX_EXPIRATIONS_TO_SCAN]
+
+            print("TRADIER VALID OPTION DATES:", valid_dates)
+
+            for exp, dte in valid_dates:
+                chain_df = tradier_chain_df(symbol, exp)
+
+                for scan_direction in directions_to_scan:
+                    option_type = "call" if scan_direction == "CALL" else "put"
+                    side_df = chain_df[chain_df.get("option_type", "") == option_type].copy()
+
+                    side_df = normalize_options_df(
+                        side_df,
+                        stock_price=stock_price,
+                        dte=dte,
+                        scan_direction=scan_direction,
+                        provider="tradier",
+                    )
+
+                    all_picks.extend(
+                        collect_option_picks_from_df(
+                            side_df,
+                            scan_direction=scan_direction,
+                            exp=exp,
+                            dte=dte,
+                            provider="tradier",
+                        )
+                    )
+
+            provider_used = "tradier"
+
+        except Exception as e:
+            print(f"TRADIER OPTIONS ERROR for {symbol}:", e)
+
+    # Fallback: yfinance, but cached and limited
+    if not all_picks:
+        try:
+            ticker = yf.Ticker(symbol)
+            valid_dates = yahoo_option_dates_in_range(ticker, MIN_DTE, MAX_DTE)
+            valid_dates = valid_dates[:MAX_EXPIRATIONS_TO_SCAN]
+
+            print("YAHOO VALID OPTION DATES:", valid_dates)
+
+            for exp, dte in valid_dates:
+                for scan_direction in directions_to_scan:
+                    option_side = "calls" if scan_direction == "CALL" else "puts"
+
+                    raw_df = yahoo_chain_df(ticker, symbol, exp, option_side)
+
+                    side_df = normalize_options_df(
+                        raw_df,
+                        stock_price=stock_price,
+                        dte=dte,
+                        scan_direction=scan_direction,
+                        provider="yahoo",
+                    )
+
+                    all_picks.extend(
+                        collect_option_picks_from_df(
+                            side_df,
+                            scan_direction=scan_direction,
+                            exp=exp,
+                            dte=dte,
+                            provider="yahoo",
+                        )
+                    )
+
+            provider_used = "yahoo"
+
+        except Exception as e:
+            print(f"YAHOO OPTIONS ERROR for {symbol}:", e)
 
     all_picks.sort(key=lambda x: x["score"], reverse=True)
 
@@ -765,10 +1098,14 @@ def get_best_options(symbol: str, signal: dict, market_status: str):
     for pick in all_picks:
         key = pick.get("contract_symbol") or f"{pick['direction']}-{pick['expiration']}-{pick['strike']}"
         if key not in seen:
+            pick["provider_used"] = provider_used
             deduped.append(pick)
             seen.add(key)
 
-    return deduped[:TOP_OPTION_PICKS]
+    result = deduped[:TOP_OPTION_PICKS]
+    cache_set(OPTIONS_CACHE, cache_key, result)
+
+    return result
 
 
 def format_candles(df: pd.DataFrame):
@@ -830,6 +1167,7 @@ def build_scan(symbol: str):
 
     return {
         "symbol": symbol,
+        "version": APP_VERSION,
         "signal": signal,
         "options": options,
         "best_option": options[0] if options else None,
@@ -838,6 +1176,7 @@ def build_scan(symbol: str):
         "market_status": session["status"],
         "extended_hours": session["extended_hours"],
         "session_label": session["session_label"],
+        "cached": False,
         "updated_at": now.strftime("%Y-%m-%d %I:%M:%S %p ET"),
     }
 
@@ -846,31 +1185,82 @@ def build_scan(symbol: str):
 def home():
     return render_template("index.html", supported_symbols=DEFAULT_SYMBOLS)
 
+
 @app.route("/version")
 def version():
-    return jsonify({
-        "version": "options-render-fallback-v4",
-        "min_dte": MIN_DTE,
-        "max_dte": MAX_DTE
-    })
+    return jsonify(
+        {
+            "version": APP_VERSION,
+            "min_dte": MIN_DTE,
+            "max_dte": MAX_DTE,
+            "cache_seconds": CACHE_SECONDS,
+            "options_cache_seconds": OPTIONS_CACHE_SECONDS,
+            "max_expirations_to_scan": MAX_EXPIRATIONS_TO_SCAN,
+            "tradier_enabled": tradier_enabled(),
+        }
+    )
+
 
 @app.route("/debug-options")
 def debug_options():
-    return jsonify({
-        "status": "route works",
+    symbol = normalize_symbol(request.args.get("symbol", "SPY"))
+
+    result = {
+        "symbol": symbol,
         "version": APP_VERSION,
+        "tradier_enabled": tradier_enabled(),
         "min_dte": MIN_DTE,
-        "max_dte": MAX_DTE
-    })
+        "max_dte": MAX_DTE,
+    }
+
+    if tradier_enabled():
+        try:
+            dates = tradier_option_dates_in_range(symbol, MIN_DTE, MAX_DTE)
+            result["tradier_expiration_count"] = len(dates)
+            result["tradier_expirations"] = dates[:5]
+
+            if dates:
+                exp, _dte = dates[0]
+                df = tradier_chain_df(symbol, exp)
+                result["tradier_test_expiration"] = exp
+                result["tradier_chain_rows"] = int(len(df))
+                result["tradier_calls"] = int((df.get("option_type") == "call").sum()) if not df.empty else 0
+                result["tradier_puts"] = int((df.get("option_type") == "put").sum()) if not df.empty else 0
+
+        except Exception as e:
+            result["tradier_error"] = str(e)
+
+    try:
+        ticker = yf.Ticker(symbol)
+        yahoo_dates = yahoo_option_dates_in_range(ticker, MIN_DTE, MAX_DTE)
+        result["yahoo_expiration_count"] = len(yahoo_dates)
+        result["yahoo_expirations"] = yahoo_dates[:5]
+    except Exception as e:
+        result["yahoo_error"] = str(e)
+
+    return jsonify(result)
+
 
 @app.route("/scan")
 def scan():
     symbol = normalize_symbol(request.args.get("symbol", "SPY"))
+    force = request.args.get("force", "0") == "1"
+    cache_key = f"scan:{symbol}"
+
+    cached = cache_get(SCAN_CACHE, cache_key, CACHE_SECONDS)
+
+    if cached is not None and not force:
+        cached_copy = dict(cached)
+        cached_copy["cached"] = True
+        return jsonify({"success": True, "data": cached_copy})
 
     try:
         data = build_scan(symbol)
 
+        cache_set(SCAN_CACHE, cache_key, data)
+
         print("SCAN OK")
+        print("Version:", APP_VERSION)
         print("Symbol:", symbol)
         print("Signal:", data["signal"]["direction"])
         print("Score:", data["signal"]["score"])
@@ -883,12 +1273,25 @@ def scan():
 
     except Exception as e:
         print(f"SCAN ERROR for {symbol}:", str(e))
-        return jsonify({"success": False, "error": str(e)}), 500
+
+        if cached is not None:
+            cached_copy = dict(cached)
+            cached_copy["cached"] = True
+            cached_copy["warning"] = "Live scan failed. Showing cached data."
+            cached_copy["error"] = str(e)
+            return jsonify({"success": True, "data": cached_copy})
+
+        return jsonify({"success": False, "error": str(e), "version": APP_VERSION}), 500
 
 
 @app.route("/quote")
 def quote():
     symbol = normalize_symbol(request.args.get("symbol", "SPY"))
+    cache_key = f"quote:{symbol}"
+
+    cached = cache_get(QUOTE_CACHE, cache_key, QUOTE_CACHE_SECONDS)
+    if cached is not None:
+        return jsonify(cached)
 
     try:
         ticker = yf.Ticker(symbol)
@@ -899,18 +1302,24 @@ def quote():
 
         price = float(hist["Close"].dropna().iloc[-1])
 
-        return jsonify({
+        payload = {
             "success": True,
             "symbol": symbol,
-            "price": round(price, 2)
-        })
+            "price": round(price, 2),
+            "version": APP_VERSION,
+        }
+
+        cache_set(QUOTE_CACHE, cache_key, payload)
+
+        return jsonify(payload)
 
     except Exception as e:
         return jsonify({
             "success": False,
-            "error": str(e)
+            "error": str(e),
+            "version": APP_VERSION,
         }), 500
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5050, debug=True)
