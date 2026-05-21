@@ -1017,7 +1017,8 @@ def get_best_options(symbol: str, signal: dict, market_status: str):
     elif signal_direction == "PUT":
         directions_to_scan = ["PUT"]
     else:
-        directions_to_scan = ["CALL", "PUT"]
+       cache_set(OPTIONS_CACHE, cache_key, [])
+    return []
 
     all_picks = []
     provider_used = "none"
