@@ -1,388 +1,414 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <title>Option Pro Dashboard</title>
+    <title>Option Pro Dashboard</title>
 
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-  <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
-</head>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='style.css') }}"
+    />
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+  </head>
 
-<body>
-  <div class="page">
+  <body>
+    <div class="page">
+      <header class="top-toolbar">
+        <div class="toolbar-actions">
+          <button id="scanBtn">Refresh Scan</button>
 
-    <header class="top-toolbar">
-      <div class="toolbar-actions">
-        <button id="scanBtn">Refresh Scan</button>
-
-        <div class="status-row">
-          <span id="globalStatus">Ready</span>
-          <span id="countdown">Next auto scan in 15s</span>
-        </div>
-      </div>
-
-      <section class="controls-bar">
-        <div class="symbol-search">
-          <input id="symbolInput" type="text" value="SPY" placeholder="Search ticker or company: AAPL, Apple, Tesla..." />
-          <button id="loadSymbolBtn" type="button">Load Symbol</button>
+          <div class="status-row">
+            <span id="globalStatus">Ready</span>
+            <span id="countdown">Next auto scan in 15s</span>
+          </div>
         </div>
 
-        <div class="favorites-bar">
-          <span class="favorites-label">Favorites:</span>
-          <div id="favoritesList" class="favorites-list"></div>
-        </div>
-
-        <div class="mode-switch">
-          <button class="toggle-btn active" data-mode="single">Single View</button>
-          <button class="toggle-btn" data-mode="split">2-Up View</button>
-        </div>
-
-        <button id="heatmapBtn" type="button">Stock Market Heatmap</button>
-      </section>
-    </header>
-
-    <section id="singleView" class="dashboard-grid single-view">
-      <div class="dashboard-panel" data-panel-symbol="SPY"></div>
-    </section>
-
-    <section id="splitView" class="dashboard-grid split-view hidden">
-      <div class="dashboard-panel" data-panel-symbol="SPY"></div>
-      <div class="dashboard-panel" data-panel-symbol="NVDA"></div>
-    </section>
-
-    <footer class="footer-note">
-      Market/news/options data for research and education only.
-    </footer>
-  </div>
-
-  <template id="panelTemplate">
-    <section class="panel-shell">
-
-      <div class="panel-header">
-        <div>
-          <span class="panel-symbol">SPY</span>
-          <button type="button" class="favorite-btn">☆ Favorite</button>
-          <span class="panel-session market-badge">-</span>
-        </div>
-
-        <div class="panel-search">
-          <input class="panelSymbolInput" type="text" value="SPY" placeholder="Ticker or company..." />
-          <button type="button" class="panelLoadBtn">Load</button>
-        </div>
-
-        <div class="panel-updated">-</div>
-      </div>
-
-      <section class="top-panel-grid">
-        <div>
-          <div class="card trade-insight-card">
-            <div class="trade-insight-header">
-              <div class="trade-insight-title">
-                <strong>Trade Read</strong>
-              </div>
-            </div>
-
-            <div class="tradeExplanation">Waiting for scan...</div>
+        <section class="controls-bar">
+          <div class="symbol-search">
+            <input
+              id="symbolInput"
+              type="text"
+              value="SPY"
+              placeholder="Search ticker or company: AAPL, Apple, Tesla..."
+            />
+            <button id="loadSymbolBtn" type="button">Load Symbol</button>
           </div>
 
-          <section class="summary-grid compact-summary">
-            <div class="card compact-card signal-card">
-              <span class="label">Signal</span>
-              <div class="stacked-value">
-                <strong class="direction">-</strong>
-                <span class="confidence confidence-badge">-</span>
+          <div class="favorites-bar">
+            <span class="favorites-label">Favorites:</span>
+            <div id="favoritesList" class="favorites-list"></div>
+          </div>
+
+          <div class="mode-switch">
+            <button class="toggle-btn active" data-mode="single">
+              Single View
+            </button>
+            <button class="toggle-btn" data-mode="split">2-Up View</button>
+          </div>
+
+          <button id="heatmapBtn" type="button">Stock Market Heatmap</button>
+        </section>
+      </header>
+
+      <section id="singleView" class="dashboard-grid single-view">
+        <div class="dashboard-panel" data-panel-symbol="SPY"></div>
+      </section>
+
+      <section id="splitView" class="dashboard-grid split-view hidden">
+        <div class="dashboard-panel" data-panel-symbol="SPY"></div>
+        <div class="dashboard-panel" data-panel-symbol="NVDA"></div>
+      </section>
+
+      <footer class="footer-note">
+        Market/news/options data for research and education only.
+      </footer>
+    </div>
+
+    <template id="panelTemplate">
+      <section class="panel-shell">
+        <div class="panel-header">
+          <div>
+            <span class="panel-symbol">SPY</span>
+            <button type="button" class="favorite-btn">☆ Favorite</button>
+            <span class="panel-session market-badge">-</span>
+          </div>
+
+          <div class="panel-search">
+            <input
+              class="panelSymbolInput"
+              type="text"
+              value="SPY"
+              placeholder="Ticker or company..."
+            />
+            <button type="button" class="panelLoadBtn">Load</button>
+          </div>
+
+          <div class="panel-updated">-</div>
+        </div>
+
+        <section class="top-panel-grid">
+          <div>
+            <div class="card trade-insight-card">
+              <div class="trade-insight-header">
+                <div class="trade-insight-title">
+                  <strong>Trade Read</strong>
+                </div>
+              </div>
+
+              <div class="tradeExplanation">Waiting for scan...</div>
+            </div>
+
+            <section class="summary-grid compact-summary">
+              <div class="card compact-card signal-card">
+                <span class="label">Signal</span>
+                <div class="stacked-value">
+                  <strong class="direction">-</strong>
+                  <span class="confidence confidence-badge">-</span>
+                </div>
+              </div>
+
+              <div class="card compact-card stat-card">
+                <span class="label">Score</span>
+                <div class="stacked-value">
+                  <strong class="signalScore">-</strong>
+                  <strong class="tradeQuality weak">-</strong>
+                </div>
+              </div>
+
+              <div class="card compact-card entry-card">
+                <span class="label">Entry</span>
+                <strong class="entryTrigger">-</strong>
+              </div>
+
+              <div class="card compact-card stop-card">
+                <span class="label">Stop</span>
+                <strong class="stopLoss">-</strong>
+              </div>
+
+              <div class="card compact-card target-card">
+                <span class="label">Target</span>
+                <strong class="targetPrice">-</strong>
+              </div>
+
+              <div class="card compact-card stat-card">
+                <span class="label">Price</span>
+                <strong class="stockPrice">-</strong>
+              </div>
+
+              <div class="card compact-card stat-card">
+                <span class="label">ATR</span>
+                <strong class="atrValue">-</strong>
+              </div>
+            </section>
+          </div>
+
+          <section class="card news-top-card">
+            <div class="section-head compact">
+              <div>
+                <span class="eyebrow">Latest Headlines</span>
+                <h2>News Ticker</h2>
               </div>
             </div>
 
-            <div class="card compact-card stat-card">
-              <span class="label">Score</span>
-              <div class="stacked-value">
-                <strong class="signalScore">-</strong>
-                <strong class="tradeQuality weak">-</strong>
+            <div class="ticker-shell">
+              <div class="newsTicker ticker-track">
+                <span class="ticker-item">Loading news...</span>
               </div>
-            </div>
-
-            <div class="card compact-card entry-card">
-              <span class="label">Entry</span>
-              <strong class="entryTrigger">-</strong>
-            </div>
-
-            <div class="card compact-card stop-card">
-              <span class="label">Stop</span>
-              <strong class="stopLoss">-</strong>
-            </div>
-
-            <div class="card compact-card target-card">
-              <span class="label">Target</span>
-              <strong class="targetPrice">-</strong>
-            </div>
-
-            <div class="card compact-card stat-card">
-              <span class="label">Price</span>
-              <strong class="stockPrice">-</strong>
-            </div>
-
-            <div class="card compact-card stat-card">
-              <span class="label">ATR</span>
-              <strong class="atrValue">-</strong>
             </div>
           </section>
-        </div>
+        </section>
 
-        <section class="card news-top-card">
-          <div class="section-head compact">
-            <div>
-              <span class="eyebrow">Latest Headlines</span>
-              <h2>News Ticker</h2>
+        <section class="chart-contract-row">
+          <div class="card chart-card">
+            <div class="section-head">
+              <div>
+                <span class="eyebrow">Live Setup</span>
+                <h2>Chart</h2>
+              </div>
+
+              <div class="chart-legend">
+                <span class="legend-item legend-entry">Entry</span>
+                <span class="legend-item legend-stop">Stop</span>
+                <span class="legend-item legend-target">Target</span>
+              </div>
             </div>
+
+            <div class="chartContainer"></div>
           </div>
 
-          <div class="ticker-shell">
-            <div class="newsTicker ticker-track">
-              <span class="ticker-item">Loading news...</span>
+          <section class="card table-card">
+            <div class="section-head compact">
+              <div>
+                <span class="eyebrow">Ranked Contracts</span>
+                <h2>Best Option Contracts</h2>
+              </div>
+
+              <div class="table-note">Best row is highlighted</div>
             </div>
-          </div>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Side</th>
+                    <th>Exp</th>
+                    <th>DTE</th>
+                    <th>Strike</th>
+                    <th>Bid</th>
+                    <th>Ask</th>
+                    <th>Mid</th>
+                    <th>Delta</th>
+                    <th>IV</th>
+                    <th>Vol</th>
+                    <th>OI</th>
+                    <th>Spr</th>
+                    <th>Stop</th>
+                    <th>Target</th>
+                    <th>Score</th>
+                  </tr>
+                </thead>
+
+                <tbody class="optionsTableBody">
+                  <tr>
+                    <td colspan="15" class="empty">Waiting for scan...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
         </section>
       </section>
+    </template>
 
-      <section class="chart-contract-row">
-        <div class="card chart-card">
-          <div class="section-head">
-            <div>
-              <span class="eyebrow">Live Setup</span>
-              <h2>Chart</h2>
-            </div>
-
-            <div class="chart-legend">
-              <span class="legend-item legend-entry">Entry</span>
-              <span class="legend-item legend-stop">Stop</span>
-              <span class="legend-item legend-target">Target</span>
-            </div>
-          </div>
-
-          <div class="chartContainer"></div>
+    <div id="heatmapModal" class="heatmap-modal hidden">
+      <div class="heatmap-modal-content">
+        <div class="heatmap-modal-header">
+          <h2>TradingView S&P 500 Heatmap</h2>
+          <button id="closeHeatmapBtn" type="button">Close</button>
         </div>
 
-        <section class="card table-card">
-          <div class="section-head compact">
-            <div>
-              <span class="eyebrow">Ranked Contracts</span>
-              <h2>Best Option Contracts</h2>
-            </div>
-
-            <div class="table-note">Best row is highlighted</div>
-          </div>
-
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Side</th>
-                  <th>Exp</th>
-                  <th>DTE</th>
-                  <th>Strike</th>
-                  <th>Bid</th>
-                  <th>Ask</th>
-                  <th>Mid</th>
-                  <th>Delta</th>
-                  <th>IV</th>
-                  <th>Vol</th>
-                  <th>OI</th>
-                  <th>Spr</th>
-                  <th>Stop</th>
-                  <th>Target</th>
-                  <th>Score</th>
-                </tr>
-              </thead>
-
-              <tbody class="optionsTableBody">
-                <tr>
-                  <td colspan="15" class="empty">Waiting for scan...</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </section>
-
-    </section>
-  </template>
-
-  <div id="heatmapModal" class="heatmap-modal hidden">
-    <div class="heatmap-modal-content">
-      <div class="heatmap-modal-header">
-        <h2>TradingView S&P 500 Heatmap</h2>
-        <button id="closeHeatmapBtn" type="button">Close</button>
+        <iframe
+          src="https://www.tradingview.com/heatmap/stock/#%7B%22dataSource%22%3A%22SPX500%22%2C%22blockColor%22%3A%22change%22%2C%22blockSize%22%3A%22market_cap_basic%22%2C%22grouping%22%3A%22sector%22%7D"
+          class="heatmap-frame"
+          loading="lazy"
+        >
+        </iframe>
       </div>
-
-      <iframe
-        src="https://www.tradingview.com/heatmap/stock/#%7B%22dataSource%22%3A%22SPX500%22%2C%22blockColor%22%3A%22change%22%2C%22blockSize%22%3A%22market_cap_basic%22%2C%22grouping%22%3A%22sector%22%7D"
-        class="heatmap-frame"
-        loading="lazy">
-      </iframe>
     </div>
-  </div>
 
-<script>
-const AUTO_SCAN_MS = 15000;
+    <script>
+      const AUTO_SCAN_MS = 15000;
 
-const COMPANY_TO_TICKER = {
-  "APPLE": "AAPL",
-  "APPLE INC": "AAPL",
-  "NVIDIA": "NVDA",
-  "NVIDIA CORPORATION": "NVDA",
-  "MICROSOFT": "MSFT",
-  "MICROSOFT CORPORATION": "MSFT",
-  "TESLA": "TSLA",
-  "TESLA INC": "TSLA",
-  "AMAZON": "AMZN",
-  "AMAZON.COM": "AMZN",
-  "META": "META",
-  "FACEBOOK": "META",
-  "GOOGLE": "GOOGL",
-  "ALPHABET": "GOOGL",
-  "AMD": "AMD",
-  "ADVANCED MICRO DEVICES": "AMD",
-  "BROADCOM": "AVGO",
-  "NETFLIX": "NFLX",
-  "PALANTIR": "PLTR",
-  "SPY": "SPY",
-  "S&P 500": "SPY",
-  "QQQ": "QQQ",
-  "NASDAQ": "QQQ",
-  "JPMORGAN": "JPM",
-  "JP MORGAN": "JPM",
-  "BANK OF AMERICA": "BAC",
-  "VISA": "V",
-  "MASTERCARD": "MA",
-  "WALMART": "WMT",
-  "COSTCO": "COST",
-  "DISNEY": "DIS",
-  "MCDONALDS": "MCD",
-  "MCDONALD'S": "MCD",
-  "COCA COLA": "KO",
-  "PEPSI": "PEP",
-  "EXXON": "XOM",
-  "CHEVRON": "CVX",
-  "UNITEDHEALTH": "UNH",
-  "ELI LILLY": "LLY",
-  "ORACLE": "ORCL",
-  "SALESFORCE": "CRM",
-  "ADOBE": "ADBE",
-  "INTEL": "INTC",
-  "QUALCOMM": "QCOM",
-  "UBER": "UBER",
-  "SHOPIFY": "SHOP",
-  "SNOWFLAKE": "SNOW"
-};
+      const COMPANY_TO_TICKER = {
+        APPLE: "AAPL",
+        "APPLE INC": "AAPL",
+        NVIDIA: "NVDA",
+        "NVIDIA CORPORATION": "NVDA",
+        MICROSOFT: "MSFT",
+        "MICROSOFT CORPORATION": "MSFT",
+        TESLA: "TSLA",
+        "TESLA INC": "TSLA",
+        AMAZON: "AMZN",
+        "AMAZON.COM": "AMZN",
+        META: "META",
+        FACEBOOK: "META",
+        GOOGLE: "GOOGL",
+        ALPHABET: "GOOGL",
+        AMD: "AMD",
+        "ADVANCED MICRO DEVICES": "AMD",
+        BROADCOM: "AVGO",
+        NETFLIX: "NFLX",
+        PALANTIR: "PLTR",
+        SPY: "SPY",
+        "S&P 500": "SPY",
+        QQQ: "QQQ",
+        NASDAQ: "QQQ",
+        JPMORGAN: "JPM",
+        "JP MORGAN": "JPM",
+        "BANK OF AMERICA": "BAC",
+        VISA: "V",
+        MASTERCARD: "MA",
+        WALMART: "WMT",
+        COSTCO: "COST",
+        DISNEY: "DIS",
+        MCDONALDS: "MCD",
+        "MCDONALD'S": "MCD",
+        "COCA COLA": "KO",
+        PEPSI: "PEP",
+        EXXON: "XOM",
+        CHEVRON: "CVX",
+        UNITEDHEALTH: "UNH",
+        "ELI LILLY": "LLY",
+        ORACLE: "ORCL",
+        SALESFORCE: "CRM",
+        ADOBE: "ADBE",
+        INTEL: "INTC",
+        QUALCOMM: "QCOM",
+        UBER: "UBER",
+        SHOPIFY: "SHOP",
+        SNOWFLAKE: "SNOW",
+      };
 
-const scanBtn = document.getElementById("scanBtn");
-const globalStatusEl = document.getElementById("globalStatus");
-const countdownEl = document.getElementById("countdown");
-const singleViewEl = document.getElementById("singleView");
-const splitViewEl = document.getElementById("splitView");
-const modeButtons = document.querySelectorAll(".toggle-btn");
-const symbolInput = document.getElementById("symbolInput");
-const loadSymbolBtn = document.getElementById("loadSymbolBtn");
-const favoritesList = document.getElementById("favoritesList");
+      const scanBtn = document.getElementById("scanBtn");
+      const globalStatusEl = document.getElementById("globalStatus");
+      const countdownEl = document.getElementById("countdown");
+      const singleViewEl = document.getElementById("singleView");
+      const splitViewEl = document.getElementById("splitView");
+      const modeButtons = document.querySelectorAll(".toggle-btn");
+      const symbolInput = document.getElementById("symbolInput");
+      const loadSymbolBtn = document.getElementById("loadSymbolBtn");
+      const favoritesList = document.getElementById("favoritesList");
 
-const heatmapBtn = document.getElementById("heatmapBtn");
-const heatmapModal = document.getElementById("heatmapModal");
-const closeHeatmapBtn = document.getElementById("closeHeatmapBtn");
+      const heatmapBtn = document.getElementById("heatmapBtn");
+      const heatmapModal = document.getElementById("heatmapModal");
+      const closeHeatmapBtn = document.getElementById("closeHeatmapBtn");
 
-let currentMode = "single";
-let activeSingleSymbol = "SPY";
-let isScanning = false;
-let autoScanInterval = null;
-let countdownInterval = null;
-let remainingSeconds = AUTO_SCAN_MS / 1000;
-let favoriteSymbols = JSON.parse(localStorage.getItem("favoriteSymbols") || "[]");
+      let currentMode = "single";
+      let activeSingleSymbol = "SPY";
+      let isScanning = false;
+      let autoScanInterval = null;
+      let countdownInterval = null;
+      let remainingSeconds = AUTO_SCAN_MS / 1000;
+      let favoriteSymbols = JSON.parse(
+        localStorage.getItem("favoriteSymbols") || "[]",
+      );
 
-const panelStore = new WeakMap();
+      const panelStore = new WeakMap();
 
-function cleanSymbol(value) {
-  let input = String(value || "SPY").trim().toUpperCase();
+      function cleanSymbol(value) {
+        let input = String(value || "SPY")
+          .trim()
+          .toUpperCase();
 
-  if (COMPANY_TO_TICKER[input]) {
-    return COMPANY_TO_TICKER[input];
-  }
+        if (COMPANY_TO_TICKER[input]) {
+          return COMPANY_TO_TICKER[input];
+        }
 
-  input = input
-    .replace("$", "")
-    .replace(/\s+/g, "")
-    .replace(".", "-");
+        input = input.replace("$", "").replace(/\s+/g, "").replace(".", "-");
 
-  return input || "SPY";
-}
+        return input || "SPY";
+      }
 
-function formatMoney(value) {
-  if (value === null || value === undefined || value === "") return "-";
-  const number = Number(value);
-  if (!Number.isFinite(number)) return "-";
-  return `$${number.toFixed(2)}`;
-}
+      function formatMoney(value) {
+        if (value === null || value === undefined || value === "") return "-";
+        const number = Number(value);
+        if (!Number.isFinite(number)) return "-";
+        return `$${number.toFixed(2)}`;
+      }
 
-function toChartTime(value) {
-  if (!value) return null;
-  const normalized = String(value).replace(" ", "T");
-  const ms = Date.parse(normalized);
-  if (Number.isNaN(ms)) return null;
-  return Math.floor(ms / 1000);
-}
+      function toChartTime(value) {
+        if (!value) return null;
+        const normalized = String(value).replace(" ", "T");
+        const ms = Date.parse(normalized);
+        if (Number.isNaN(ms)) return null;
+        return Math.floor(ms / 1000);
+      }
 
-function saveFavorites() {
-  localStorage.setItem("favoriteSymbols", JSON.stringify(favoriteSymbols));
-}
+      function saveFavorites() {
+        localStorage.setItem(
+          "favoriteSymbols",
+          JSON.stringify(favoriteSymbols),
+        );
+      }
 
-function isFavorite(symbol) {
-  return favoriteSymbols.includes(cleanSymbol(symbol));
-}
+      function isFavorite(symbol) {
+        return favoriteSymbols.includes(cleanSymbol(symbol));
+      }
 
-function toggleFavorite(symbol) {
-  symbol = cleanSymbol(symbol);
+      function toggleFavorite(symbol) {
+        symbol = cleanSymbol(symbol);
 
-  if (isFavorite(symbol)) {
-    favoriteSymbols = favoriteSymbols.filter(item => item !== symbol);
-  } else {
-    favoriteSymbols.push(symbol);
-  }
+        if (isFavorite(symbol)) {
+          favoriteSymbols = favoriteSymbols.filter((item) => item !== symbol);
+        } else {
+          favoriteSymbols.push(symbol);
+        }
 
-  saveFavorites();
-  renderFavorites();
-  document.querySelectorAll(".dashboard-panel").forEach(updateFavoriteButton);
-}
+        saveFavorites();
+        renderFavorites();
+        document
+          .querySelectorAll(".dashboard-panel")
+          .forEach(updateFavoriteButton);
+      }
 
-function updateFavoriteButton(panelEl) {
-  const panelData = panelStore.get(panelEl);
-  if (!panelData || !panelData.refs.favoriteBtn) return;
+      function updateFavoriteButton(panelEl) {
+        const panelData = panelStore.get(panelEl);
+        if (!panelData || !panelData.refs.favoriteBtn) return;
 
-  const symbol = cleanSymbol(panelEl.dataset.panelSymbol);
+        const symbol = cleanSymbol(panelEl.dataset.panelSymbol);
 
-  panelData.refs.favoriteBtn.textContent = isFavorite(symbol)
-    ? "★ Favorited"
-    : "☆ Favorite";
+        panelData.refs.favoriteBtn.textContent = isFavorite(symbol)
+          ? "★ Favorited"
+          : "☆ Favorite";
 
-  panelData.refs.favoriteBtn.classList.toggle("active", isFavorite(symbol));
-}
+        panelData.refs.favoriteBtn.classList.toggle(
+          "active",
+          isFavorite(symbol),
+        );
+      }
 
-async function renderFavorites() {
-  if (!favoritesList) return;
+      async function renderFavorites() {
+        if (!favoritesList) return;
 
-  if (!favoriteSymbols.length) {
-    favoritesList.innerHTML = `<span class="favorite-empty">No favorites yet</span>`;
-    return;
-  }
+        if (!favoriteSymbols.length) {
+          favoritesList.innerHTML = `<span class="favorite-empty">No favorites yet</span>`;
+          return;
+        }
 
-  const cards = await Promise.all(
-    favoriteSymbols.map(async symbol => {
-      try {
-        const response = await fetch(`/quote?symbol=${encodeURIComponent(symbol)}`);
-        const json = await response.json();
-        const price = json.success ? `$${Number(json.price).toFixed(2)}` : "-";
+        const cards = await Promise.all(
+          favoriteSymbols.map(async (symbol) => {
+            try {
+              const response = await fetch(
+                `/quote?symbol=${encodeURIComponent(symbol)}`,
+              );
+              const json = await response.json();
+              const price = json.success
+                ? `$${Number(json.price).toFixed(2)}`
+                : "-";
 
-        return `
+              return `
   <div class="favorite-stock-wrap">
 
     <button class="remove-favorite-btn" data-remove-symbol="${symbol}">
@@ -396,227 +422,233 @@ async function renderFavorites() {
 
   </div>
 `;
-      } catch {
-        return `
+            } catch {
+              return `
           <button class="favorite-stock" data-symbol="${symbol}">
             <span>${symbol}</span>
             <strong>-</strong>
           </button>
         `;
+            }
+          }),
+        );
+
+        favoritesList.innerHTML = cards.join("");
+
+        favoritesList.querySelectorAll(".favorite-stock").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            loadSingleSymbol(btn.dataset.symbol);
+          });
+        });
+
+        favoritesList
+          .querySelectorAll(".remove-favorite-btn")
+          .forEach((btn) => {
+            btn.addEventListener("click", (event) => {
+              event.stopPropagation();
+
+              const symbol = btn.dataset.removeSymbol;
+
+              favoriteSymbols = favoriteSymbols.filter(
+                (item) => item !== symbol,
+              );
+
+              saveFavorites();
+              renderFavorites();
+
+              document
+                .querySelectorAll(".dashboard-panel")
+                .forEach(updateFavoriteButton);
+            });
+          });
       }
-    })
-  );
 
-  favoritesList.innerHTML = cards.join("");
+      function createPanel(panelEl, symbol) {
+        if (!panelEl) return;
 
-  favoritesList.querySelectorAll(".favorite-stock").forEach(btn => {
-  btn.addEventListener("click", () => {
-    loadSingleSymbol(btn.dataset.symbol);
-  });
-});
+        symbol = cleanSymbol(symbol);
 
-favoritesList.querySelectorAll(".remove-favorite-btn").forEach(btn => {
-  btn.addEventListener("click", event => {
-    event.stopPropagation();
+        const template = document.getElementById("panelTemplate");
 
-    const symbol = btn.dataset.removeSymbol;
+        panelEl.innerHTML = "";
+        panelEl.appendChild(template.content.cloneNode(true));
+        panelEl.dataset.panelSymbol = symbol;
 
-    favoriteSymbols = favoriteSymbols.filter(
-      item => item !== symbol
-    );
+        const chartContainer = panelEl.querySelector(".chartContainer");
 
-    saveFavorites();
-    renderFavorites();
+        let chart = null;
+        let candleSeries = null;
 
-    document.querySelectorAll(".dashboard-panel").forEach(updateFavoriteButton);
-  });
-});
-}
+        try {
+          chart = LightweightCharts.createChart(chartContainer, {
+            layout: {
+              background: { color: "#0b1220" },
+              textColor: "#cbd5e1",
+            },
+            grid: {
+              vertLines: { color: "rgba(148,163,184,0.08)" },
+              horzLines: { color: "rgba(148,163,184,0.08)" },
+            },
+            rightPriceScale: {
+              borderColor: "rgba(148,163,184,0.15)",
+            },
+            timeScale: {
+              borderColor: "rgba(148,163,184,0.15)",
+              timeVisible: true,
+              secondsVisible: false,
+            },
+            crosshair: {
+              mode: LightweightCharts.CrosshairMode.Normal,
+            },
+            width: Math.max(chartContainer.clientWidth, 300),
+            height: chartContainer.clientHeight || 330,
+          });
 
-function createPanel(panelEl, symbol) {
-  if (!panelEl) return;
+          candleSeries = chart.addSeries(LightweightCharts.CandlestickSeries, {
+            upColor: "#22c55e",
+            downColor: "#ef4444",
+            borderVisible: false,
+            wickUpColor: "#22c55e",
+            wickDownColor: "#ef4444",
+          });
+        } catch (err) {
+          chartContainer.innerHTML = `<div style="padding:20px;color:#94a3b8;">Chart could not load.</div>`;
+        }
 
-  symbol = cleanSymbol(symbol);
+        panelStore.set(panelEl, {
+          symbol,
+          refs: {
+            panelSymbol: panelEl.querySelector(".panel-symbol"),
+            panelSession: panelEl.querySelector(".panel-session"),
+            panelUpdated: panelEl.querySelector(".panel-updated"),
+            favoriteBtn: panelEl.querySelector(".favorite-btn"),
+            panelSymbolInput: panelEl.querySelector(".panelSymbolInput"),
+            panelLoadBtn: panelEl.querySelector(".panelLoadBtn"),
+            direction: panelEl.querySelector(".direction"),
+            confidence: panelEl.querySelector(".confidence"),
+            stockPrice: panelEl.querySelector(".stockPrice"),
+            entryTrigger: panelEl.querySelector(".entryTrigger"),
+            stopLoss: panelEl.querySelector(".stopLoss"),
+            targetPrice: panelEl.querySelector(".targetPrice"),
+            atrValue: panelEl.querySelector(".atrValue"),
+            signalScore: panelEl.querySelector(".signalScore"),
+            tradeQuality: panelEl.querySelector(".tradeQuality"),
+            tradeExplanation: panelEl.querySelector(".tradeExplanation"),
+            newsTicker: panelEl.querySelector(".newsTicker"),
+            optionsTableBody: panelEl.querySelector(".optionsTableBody"),
+          },
+          chart,
+          candleSeries,
+          lines: {
+            entryLine: null,
+            stopLine: null,
+            targetLine: null,
+          },
+        });
 
-  const template = document.getElementById("panelTemplate");
+        const panelData = panelStore.get(panelEl);
+        const refs = panelData.refs;
 
-  panelEl.innerHTML = "";
-  panelEl.appendChild(template.content.cloneNode(true));
-  panelEl.dataset.panelSymbol = symbol;
+        refs.panelSymbol.textContent = symbol;
 
-  const chartContainer = panelEl.querySelector(".chartContainer");
+        refs.panelSymbolInput.value = symbol;
 
-  let chart = null;
-  let candleSeries = null;
+        refs.panelSymbolInput.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") {
+            refs.panelLoadBtn.click();
+          }
+        });
 
-  try {
-    chart = LightweightCharts.createChart(chartContainer, {
-      layout: {
-        background: { color: "#0b1220" },
-        textColor: "#cbd5e1",
-      },
-      grid: {
-        vertLines: { color: "rgba(148,163,184,0.08)" },
-        horzLines: { color: "rgba(148,163,184,0.08)" },
-      },
-      rightPriceScale: {
-        borderColor: "rgba(148,163,184,0.15)",
-      },
-      timeScale: {
-        borderColor: "rgba(148,163,184,0.15)",
-        timeVisible: true,
-        secondsVisible: false,
-      },
-      crosshair: {
-        mode: LightweightCharts.CrosshairMode.Normal,
-      },
-      width: Math.max(chartContainer.clientWidth, 300),
-      height: chartContainer.clientHeight || 330,
-    });
+        refs.panelLoadBtn.addEventListener("click", () => {
+          const newSymbol = cleanSymbol(refs.panelSymbolInput.value);
+          createPanel(panelEl, newSymbol);
+          scanPanel(panelEl);
+        });
 
-    candleSeries = chart.addSeries(LightweightCharts.CandlestickSeries, {
-      upColor: "#22c55e",
-      downColor: "#ef4444",
-      borderVisible: false,
-      wickUpColor: "#22c55e",
-      wickDownColor: "#ef4444",
-    });
-  } catch (err) {
-    chartContainer.innerHTML = `<div style="padding:20px;color:#94a3b8;">Chart could not load.</div>`;
-  }
+        refs.favoriteBtn.addEventListener("click", () => {
+          toggleFavorite(panelEl.dataset.panelSymbol);
+        });
 
-  panelStore.set(panelEl, {
-    symbol,
-    refs: {
-      panelSymbol: panelEl.querySelector(".panel-symbol"),
-      panelSession: panelEl.querySelector(".panel-session"),
-      panelUpdated: panelEl.querySelector(".panel-updated"),
-      favoriteBtn: panelEl.querySelector(".favorite-btn"),
-      panelSymbolInput: panelEl.querySelector(".panelSymbolInput"),
-      panelLoadBtn: panelEl.querySelector(".panelLoadBtn"),
-      direction: panelEl.querySelector(".direction"),
-      confidence: panelEl.querySelector(".confidence"),
-      stockPrice: panelEl.querySelector(".stockPrice"),
-      entryTrigger: panelEl.querySelector(".entryTrigger"),
-      stopLoss: panelEl.querySelector(".stopLoss"),
-      targetPrice: panelEl.querySelector(".targetPrice"),
-      atrValue: panelEl.querySelector(".atrValue"),
-      signalScore: panelEl.querySelector(".signalScore"),
-      tradeQuality: panelEl.querySelector(".tradeQuality"),
-      tradeExplanation: panelEl.querySelector(".tradeExplanation"),
-      newsTicker: panelEl.querySelector(".newsTicker"),
-      optionsTableBody: panelEl.querySelector(".optionsTableBody"),
-    },
-    chart,
-    candleSeries,
-    lines: {
-      entryLine: null,
-      stopLine: null,
-      targetLine: null,
-    },
-  });
+        updateFavoriteButton(panelEl);
+      }
 
-  const panelData = panelStore.get(panelEl);
-  const refs = panelData.refs;
+      function resizePanelChart(panelEl) {
+        const panelData = panelStore.get(panelEl);
+        if (!panelData || !panelData.chart) return;
 
-  refs.panelSymbol.textContent = symbol;
+        const container = panelEl.querySelector(".chartContainer");
+        const width = Math.max(container.clientWidth, 300);
+        const height = container.clientHeight || 330;
 
-  refs.panelSymbolInput.value = symbol;
+        panelData.chart.applyOptions({ width, height });
+        panelData.chart.timeScale().fitContent();
+      }
 
-  refs.panelSymbolInput.addEventListener("keydown", event => {
-    if (event.key === "Enter") {
-      refs.panelLoadBtn.click();
-    }
-  });
+      function resizeVisibleCharts() {
+        document.querySelectorAll(".dashboard-panel").forEach((panel) => {
+          if (!panel.closest(".hidden")) {
+            resizePanelChart(panel);
+          }
+        });
+      }
 
-  refs.panelLoadBtn.addEventListener("click", () => {
-    const newSymbol = cleanSymbol(refs.panelSymbolInput.value);
-    createPanel(panelEl, newSymbol);
-    scanPanel(panelEl);
-  });
+      function setDirectionStyle(el, direction) {
+        if (!el) return;
 
-  refs.favoriteBtn.addEventListener("click", () => {
-    toggleFavorite(panelEl.dataset.panelSymbol);
-  });
+        el.classList.remove("bullish", "bearish", "neutral");
 
-  updateFavoriteButton(panelEl);
-}
+        if (direction === "CALL") {
+          el.classList.add("bullish");
+        } else if (direction === "PUT") {
+          el.classList.add("bearish");
+        } else {
+          el.classList.add("neutral");
+        }
+      }
 
-function resizePanelChart(panelEl) {
-  const panelData = panelStore.get(panelEl);
-  if (!panelData || !panelData.chart) return;
+      function setConfidence(el, confidence) {
+        if (!el) return;
 
-  const container = panelEl.querySelector(".chartContainer");
-  const width = Math.max(container.clientWidth, 300);
-  const height = container.clientHeight || 330;
+        el.textContent = confidence || "-";
+        el.className = "confidence confidence-badge";
 
-  panelData.chart.applyOptions({ width, height });
-  panelData.chart.timeScale().fitContent();
-}
+        if (confidence === "HIGH") {
+          el.classList.add("high");
+        } else if (confidence === "MEDIUM") {
+          el.classList.add("medium");
+        } else {
+          el.classList.add("low");
+        }
+      }
 
-function resizeVisibleCharts() {
-  document.querySelectorAll(".dashboard-panel").forEach(panel => {
-    if (!panel.closest(".hidden")) {
-      resizePanelChart(panel);
-    }
-  });
-}
+      function setMarketStatus(el, status) {
+        if (!el) return;
 
-function setDirectionStyle(el, direction) {
-  if (!el) return;
+        el.textContent = status || "-";
+        el.className = "panel-session market-badge";
 
-  el.classList.remove("bullish", "bearish", "neutral");
+        if (status === "OPEN") {
+          el.classList.add("open");
+        } else {
+          el.classList.add("closed");
+        }
+      }
 
-  if (direction === "CALL") {
-    el.classList.add("bullish");
-  } else if (direction === "PUT") {
-    el.classList.add("bearish");
-  } else {
-    el.classList.add("neutral");
-  }
-}
+      function renderOptions(panelRefs, options) {
+        if (!panelRefs.optionsTableBody) return;
 
-function setConfidence(el, confidence) {
-  if (!el) return;
-
-  el.textContent = confidence || "-";
-  el.className = "confidence confidence-badge";
-
-  if (confidence === "HIGH") {
-    el.classList.add("high");
-  } else if (confidence === "MEDIUM") {
-    el.classList.add("medium");
-  } else {
-    el.classList.add("low");
-  }
-}
-
-function setMarketStatus(el, status) {
-  if (!el) return;
-
-  el.textContent = status || "-";
-  el.className = "panel-session market-badge";
-
-  if (status === "OPEN") {
-    el.classList.add("open");
-  } else {
-    el.classList.add("closed");
-  }
-}
-
-function renderOptions(panelRefs, options) {
-  if (!panelRefs.optionsTableBody) return;
-
-  if (!options || options.length === 0) {
-    panelRefs.optionsTableBody.innerHTML = `
+        if (!options || options.length === 0) {
+          panelRefs.optionsTableBody.innerHTML = `
       <tr>
         <td colspan="15" class="empty">No option contracts found for this ticker right now.</td>
       </tr>
     `;
-    return;
-  }
+          return;
+        }
 
-  panelRefs.optionsTableBody.innerHTML = options.map((option, index) => `
+        panelRefs.optionsTableBody.innerHTML = options
+          .map(
+            (option, index) => `
     <tr class="${index === 0 ? "best-option-row" : ""}">
       <td>${option.direction ?? "-"}</td>
       <td>${option.expiration ?? "-"}</td>
@@ -634,308 +666,327 @@ function renderOptions(panelRefs, options) {
       <td>${option.option_target ?? "-"}</td>
       <td>${option.score ?? "-"}</td>
     </tr>
-  `).join("");
-}
+  `,
+          )
+          .join("");
+      }
 
-function renderNews(panelRefs, news, symbol) {
-  if (!panelRefs.newsTicker) return;
+      function renderNews(panelRefs, news, symbol) {
+        if (!panelRefs.newsTicker) return;
 
-  if (!news || news.length === 0) {
-    panelRefs.newsTicker.innerHTML = `<span class="ticker-item">No recent ${symbol} news available.</span>`;
-    return;
-  }
+        if (!news || news.length === 0) {
+          panelRefs.newsTicker.innerHTML = `<span class="ticker-item">No recent ${symbol} news available.</span>`;
+          return;
+        }
 
-  const html = news.map(item => `
+        const html = news
+          .map(
+            (item) => `
     <a class="ticker-item ${item.tone || "neutral"}" href="${item.link || "#"}" target="_blank" rel="noopener noreferrer">
       <span class="ticker-source">${item.publisher || "Source"}</span>
       <span class="ticker-time">${item.published || "Recent"}</span>
       <span class="ticker-title">${item.title || "Headline unavailable"}</span>
     </a>
-  `).join("");
+  `,
+          )
+          .join("");
 
-  panelRefs.newsTicker.innerHTML = html + html;
-}
+        panelRefs.newsTicker.innerHTML = html + html;
+      }
 
-function clearChartLines(panelData) {
-  try {
-    if (panelData.lines.entryLine && panelData.candleSeries) {
-      panelData.candleSeries.removePriceLine(panelData.lines.entryLine);
-    }
+      function clearChartLines(panelData) {
+        try {
+          if (panelData.lines.entryLine && panelData.candleSeries) {
+            panelData.candleSeries.removePriceLine(panelData.lines.entryLine);
+          }
 
-    if (panelData.lines.stopLine && panelData.candleSeries) {
-      panelData.candleSeries.removePriceLine(panelData.lines.stopLine);
-    }
+          if (panelData.lines.stopLine && panelData.candleSeries) {
+            panelData.candleSeries.removePriceLine(panelData.lines.stopLine);
+          }
 
-    if (panelData.lines.targetLine && panelData.candleSeries) {
-      panelData.candleSeries.removePriceLine(panelData.lines.targetLine);
-    }
-  } catch {}
+          if (panelData.lines.targetLine && panelData.candleSeries) {
+            panelData.candleSeries.removePriceLine(panelData.lines.targetLine);
+          }
+        } catch {}
 
-  panelData.lines.entryLine = null;
-  panelData.lines.stopLine = null;
-  panelData.lines.targetLine = null;
-}
+        panelData.lines.entryLine = null;
+        panelData.lines.stopLine = null;
+        panelData.lines.targetLine = null;
+      }
 
-function renderChart(panelData, candles, signal) {
-  if (!panelData.chart || !panelData.candleSeries) return;
+      function renderChart(panelData, candles, signal) {
+        if (!panelData.chart || !panelData.candleSeries) return;
 
-  const safeCandles = (candles || [])
-    .map(c => ({
-      time: toChartTime(c.time),
-      open: Number(c.open),
-      high: Number(c.high),
-      low: Number(c.low),
-      close: Number(c.close),
-    }))
-    .filter(c =>
-      c.time !== null &&
-      Number.isFinite(c.open) &&
-      Number.isFinite(c.high) &&
-      Number.isFinite(c.low) &&
-      Number.isFinite(c.close)
-    );
+        const safeCandles = (candles || [])
+          .map((c) => ({
+            time: toChartTime(c.time),
+            open: Number(c.open),
+            high: Number(c.high),
+            low: Number(c.low),
+            close: Number(c.close),
+          }))
+          .filter(
+            (c) =>
+              c.time !== null &&
+              Number.isFinite(c.open) &&
+              Number.isFinite(c.high) &&
+              Number.isFinite(c.low) &&
+              Number.isFinite(c.close),
+          );
 
-  panelData.candleSeries.setData(safeCandles);
+        panelData.candleSeries.setData(safeCandles);
 
-  clearChartLines(panelData);
+        clearChartLines(panelData);
 
-  if (signal && signal.trigger_price != null) {
-    panelData.lines.entryLine = panelData.candleSeries.createPriceLine({
-      price: Number(signal.trigger_price),
-      color: "#38bdf8",
-      lineWidth: 2,
-      lineStyle: 2,
-      axisLabelVisible: true,
-      title: "Entry",
-    });
-  }
+        if (signal && signal.trigger_price != null) {
+          panelData.lines.entryLine = panelData.candleSeries.createPriceLine({
+            price: Number(signal.trigger_price),
+            color: "#38bdf8",
+            lineWidth: 2,
+            lineStyle: 2,
+            axisLabelVisible: true,
+            title: "Entry",
+          });
+        }
 
-  if (signal && signal.stop_price != null) {
-    panelData.lines.stopLine = panelData.candleSeries.createPriceLine({
-      price: Number(signal.stop_price),
-      color: "#ef4444",
-      lineWidth: 2,
-      lineStyle: 2,
-      axisLabelVisible: true,
-      title: "Stop",
-    });
-  }
+        if (signal && signal.stop_price != null) {
+          panelData.lines.stopLine = panelData.candleSeries.createPriceLine({
+            price: Number(signal.stop_price),
+            color: "#ef4444",
+            lineWidth: 2,
+            lineStyle: 2,
+            axisLabelVisible: true,
+            title: "Stop",
+          });
+        }
 
-  if (signal && signal.target_price != null) {
-    panelData.lines.targetLine = panelData.candleSeries.createPriceLine({
-      price: Number(signal.target_price),
-      color: "#22c55e",
-      lineWidth: 2,
-      lineStyle: 2,
-      axisLabelVisible: true,
-      title: "Target",
-    });
-  }
+        if (signal && signal.target_price != null) {
+          panelData.lines.targetLine = panelData.candleSeries.createPriceLine({
+            price: Number(signal.target_price),
+            color: "#22c55e",
+            lineWidth: 2,
+            lineStyle: 2,
+            axisLabelVisible: true,
+            title: "Target",
+          });
+        }
 
-  resizePanelChart(panelData.refs.panelSymbol.closest(".dashboard-panel"));
-}
+        resizePanelChart(
+          panelData.refs.panelSymbol.closest(".dashboard-panel"),
+        );
+      }
 
-function renderPanel(panelEl, data) {
-  const panelData = panelStore.get(panelEl);
-  if (!panelData) return;
+      function renderPanel(panelEl, data) {
+        const panelData = panelStore.get(panelEl);
+        if (!panelData) return;
 
-  const refs = panelData.refs;
-  const signal = data.signal || {};
-  const symbol = cleanSymbol(data.symbol || panelEl.dataset.panelSymbol);
+        const refs = panelData.refs;
+        const signal = data.signal || {};
+        const symbol = cleanSymbol(data.symbol || panelEl.dataset.panelSymbol);
 
-  panelEl.dataset.panelSymbol = symbol;
+        panelEl.dataset.panelSymbol = symbol;
 
-  refs.panelSymbol.textContent = symbol;
-  refs.panelUpdated.textContent = data.updated_at || "-";
-  refs.panelSymbolInput.value = symbol;
-  refs.direction.textContent = signal.direction || "-";
-  refs.stockPrice.textContent = formatMoney(signal.stock_price);
-  refs.entryTrigger.textContent = formatMoney(signal.trigger_price);
-  refs.stopLoss.textContent = formatMoney(signal.stop_price);
-  refs.targetPrice.textContent = formatMoney(signal.target_price);
-  refs.atrValue.textContent = signal.atr ?? "-";
-  refs.signalScore.textContent = signal.score ?? "-";
-  refs.tradeQuality.textContent = signal.trade_quality || "-";
-  refs.tradeQuality.className = "tradeQuality " + (signal.trade_quality_class || "avoid");
-  refs.tradeExplanation.textContent = signal.trade_explanation || "No trade explanation available yet.";
+        refs.panelSymbol.textContent = symbol;
+        refs.panelUpdated.textContent = data.updated_at || "-";
+        refs.panelSymbolInput.value = symbol;
+        refs.direction.textContent = signal.direction || "-";
+        refs.stockPrice.textContent = formatMoney(signal.stock_price);
+        refs.entryTrigger.textContent = formatMoney(signal.trigger_price);
+        refs.stopLoss.textContent = formatMoney(signal.stop_price);
+        refs.targetPrice.textContent = formatMoney(signal.target_price);
+        refs.atrValue.textContent = signal.atr ?? "-";
+        refs.signalScore.textContent = signal.score ?? "-";
+        refs.tradeQuality.textContent = signal.trade_quality || "-";
+        refs.tradeQuality.className =
+          "tradeQuality " + (signal.trade_quality_class || "avoid");
+        refs.tradeExplanation.textContent =
+          signal.trade_explanation || "No trade explanation available yet.";
 
-  setDirectionStyle(refs.direction, signal.direction || "NO TRADE");
-  setConfidence(refs.confidence, signal.confidence || "LOW");
-  setMarketStatus(refs.panelSession, data.market_status || "-");
+        setDirectionStyle(refs.direction, signal.direction || "NO TRADE");
+        setConfidence(refs.confidence, signal.confidence || "LOW");
+        setMarketStatus(refs.panelSession, data.market_status || "-");
 
-  updateFavoriteButton(panelEl);
-  renderOptions(refs, data.options || []);
-  renderNews(refs, data.news || [], symbol);
-  renderChart(panelData, data.candles || [], signal);
-  renderFavorites();
-}
+        updateFavoriteButton(panelEl);
+        renderOptions(refs, data.options || []);
+        renderNews(refs, data.news || [], symbol);
+        renderChart(panelData, data.candles || [], signal);
+        renderFavorites();
+      }
 
-async function scanPanel(panelEl, force = false, refreshTimeText = "") {
-  const symbol = cleanSymbol(panelEl.dataset.panelSymbol || "SPY");
+      async function scanPanel(panelEl, force = false, refreshTimeText = "") {
+        const symbol = cleanSymbol(panelEl.dataset.panelSymbol || "SPY");
 
-  try {
-    const url = `/scan?symbol=${encodeURIComponent(symbol)}&force=${force ? "1" : "0"}&t=${Date.now()}`;
-    const response = await fetch(url, { cache: "no-store" });
-    const result = await response.json();
+        try {
+          const url = `/scan?symbol=${encodeURIComponent(symbol)}&force=${force ? "1" : "0"}&t=${Date.now()}`;
+          const response = await fetch(url, { cache: "no-store" });
+          const result = await response.json();
 
-    if (!result.success) {
-      throw new Error(result.error || "Scan failed");
-    }
+          if (!result.success) {
+            throw new Error(result.error || "Scan failed");
+          }
 
-    renderPanel(panelEl, result.data);
+          renderPanel(panelEl, result.data);
 
-    const panelData = panelStore.get(panelEl);
+          const panelData = panelStore.get(panelEl);
 
-    if (panelData && panelData.refs && panelData.refs.updated) {
-      panelData.refs.updated.textContent = refreshTimeText;
-    }
+          if (panelData && panelData.refs && panelData.refs.updated) {
+            panelData.refs.updated.textContent = refreshTimeText;
+          }
 
-    panelEl.querySelectorAll(".panel-updated").forEach(el => {
-      el.textContent = refreshTimeText;
-    });
+          panelEl.querySelectorAll(".panel-updated").forEach((el) => {
+            el.textContent = refreshTimeText;
+          });
 
-    return true;
-  } catch (err) {
-    const panelData = panelStore.get(panelEl);
+          return true;
+        } catch (err) {
+          const panelData = panelStore.get(panelEl);
 
-    if (panelData && panelData.refs && panelData.refs.tradeExplanation) {
-      panelData.refs.tradeExplanation.textContent = `Error loading ${symbol}: ${err.message}`;
-    }
+          if (panelData && panelData.refs && panelData.refs.tradeExplanation) {
+            panelData.refs.tradeExplanation.textContent = `Error loading ${symbol}: ${err.message}`;
+          }
 
-    return false;
-  }
-}
+          return false;
+        }
+      }
 
-async function runScan(force = false) {
-  if (isScanning) return;
+      async function runScan(force = false) {
+        if (isScanning) return;
 
-  isScanning = true;
-  scanBtn.disabled = true;
+        isScanning = true;
+        scanBtn.disabled = true;
 
-  const refreshTimeText = new Date().toLocaleString();
+        const refreshTimeText = new Date().toLocaleString();
 
-  globalStatusEl.textContent = force
-    ? `Refreshing live scan... ${refreshTimeText}`
-    : `Auto refreshing... ${refreshTimeText}`;
+        globalStatusEl.textContent = force
+          ? `Refreshing live scan... ${refreshTimeText}`
+          : `Auto refreshing... ${refreshTimeText}`;
 
-  const visiblePanels = [...document.querySelectorAll(".dashboard-panel")]
-    .filter(panel => !panel.closest(".hidden"));
+        const visiblePanels = [
+          ...document.querySelectorAll(".dashboard-panel"),
+        ].filter((panel) => !panel.closest(".hidden"));
 
-  const results = await Promise.all(
-    visiblePanels.map(panel => scanPanel(panel, force, refreshTimeText))
-  );
+        const results = await Promise.all(
+          visiblePanels.map((panel) =>
+            scanPanel(panel, force, refreshTimeText),
+          ),
+        );
 
-  const successCount = results.filter(Boolean).length;
+        const successCount = results.filter(Boolean).length;
 
-  globalStatusEl.textContent = `Updated ${successCount}/${visiblePanels.length} • ${refreshTimeText}`;
+        globalStatusEl.textContent = `Updated ${successCount}/${visiblePanels.length} • ${refreshTimeText}`;
 
-  visiblePanels.forEach(panel => {
-    const panelData = panelStore.get(panel);
+        visiblePanels.forEach((panel) => {
+          const panelData = panelStore.get(panel);
 
-    if (panelData && panelData.refs && panelData.refs.updated) {
-      panelData.refs.updated.textContent = refreshTimeText;
-    }
+          if (panelData && panelData.refs && panelData.refs.updated) {
+            panelData.refs.updated.textContent = refreshTimeText;
+          }
 
-    panel.querySelectorAll(".panel-updated").forEach(el => {
-      el.textContent = refreshTimeText;
-    });
-  });
+          panel.querySelectorAll(".panel-updated").forEach((el) => {
+            el.textContent = refreshTimeText;
+          });
+        });
 
-  scanBtn.disabled = false;
-  isScanning = false;
-  remainingSeconds = AUTO_SCAN_MS / 1000;
-}
+        scanBtn.disabled = false;
+        isScanning = false;
+        remainingSeconds = AUTO_SCAN_MS / 1000;
+      }
 
-function setMode(mode) {
-  currentMode = mode;
+      function setMode(mode) {
+        currentMode = mode;
 
-  modeButtons.forEach(btn => {
-    btn.classList.toggle("active", btn.dataset.mode === mode);
-  });
+        modeButtons.forEach((btn) => {
+          btn.classList.toggle("active", btn.dataset.mode === mode);
+        });
 
-  if (mode === "split") {
-    singleViewEl.classList.add("hidden");
-    splitViewEl.classList.remove("hidden");
-  } else {
-    splitViewEl.classList.add("hidden");
-    singleViewEl.classList.remove("hidden");
-  }
+        if (mode === "split") {
+          singleViewEl.classList.add("hidden");
+          splitViewEl.classList.remove("hidden");
+        } else {
+          splitViewEl.classList.add("hidden");
+          singleViewEl.classList.remove("hidden");
+        }
 
-  resizeVisibleCharts();
-  runScan();
-}
+        resizeVisibleCharts();
+        runScan();
+      }
 
-function loadSingleSymbol(symbol) {
-  activeSingleSymbol = cleanSymbol(symbol);
-  symbolInput.value = activeSingleSymbol;
+      function loadSingleSymbol(symbol) {
+        activeSingleSymbol = cleanSymbol(symbol);
+        symbolInput.value = activeSingleSymbol;
 
-  const singlePanel = singleViewEl.querySelector(".dashboard-panel");
+        const singlePanel = singleViewEl.querySelector(".dashboard-panel");
 
-  createPanel(singlePanel, activeSingleSymbol);
-  setMode("single");
-}
+        createPanel(singlePanel, activeSingleSymbol);
+        setMode("single");
+      }
 
-function startAutoScan() {
-  if (autoScanInterval) clearInterval(autoScanInterval);
-  if (countdownInterval) clearInterval(countdownInterval);
+      function startAutoScan() {
+        if (autoScanInterval) clearInterval(autoScanInterval);
+        if (countdownInterval) clearInterval(countdownInterval);
 
- autoScanInterval = setInterval(() => {
-  runScan(false);
-}, AUTO_SCAN_MS);
+        autoScanInterval = setInterval(() => {
+          runScan(false);
+        }, AUTO_SCAN_MS);
 
-  countdownInterval = setInterval(() => {
-    remainingSeconds -= 1;
+        countdownInterval = setInterval(() => {
+          remainingSeconds -= 1;
 
-    if (remainingSeconds <= 0) {
-      remainingSeconds = AUTO_SCAN_MS / 1000;
-    }
+          if (remainingSeconds <= 0) {
+            remainingSeconds = AUTO_SCAN_MS / 1000;
+          }
 
-    countdownEl.textContent = `Next auto scan in ${remainingSeconds}s`;
-  }, 1000);
-}
+          countdownEl.textContent = `Next auto scan in ${remainingSeconds}s`;
+        }, 1000);
+      }
 
-if (heatmapBtn) {
-  heatmapBtn.addEventListener("click", () => {
-    window.open(
-      "https://www.tradingview.com/heatmap/stock/#%7B%22dataSource%22%3A%22SPX500%22%2C%22blockColor%22%3A%22change%22%2C%22blockSize%22%3A%22market_cap_basic%22%2C%22grouping%22%3A%22sector%22%7D",
-      "_blank"
-    );
-  });
-}
+      if (heatmapBtn) {
+        heatmapBtn.addEventListener("click", () => {
+          window.open(
+            "https://www.tradingview.com/heatmap/stock/#%7B%22dataSource%22%3A%22SPX500%22%2C%22blockColor%22%3A%22change%22%2C%22blockSize%22%3A%22market_cap_basic%22%2C%22grouping%22%3A%22sector%22%7D",
+            "_blank",
+          );
+        });
+      }
 
-scanBtn.addEventListener("click", () => {
-  runScan(true);
-});
+      scanBtn.addEventListener("click", () => {
+        runScan(true);
+      });
 
-loadSymbolBtn.addEventListener("click", () => {
-  const symbol = cleanSymbol(symbolInput.value);
-  loadSingleSymbol(symbol);
-});
+      loadSymbolBtn.addEventListener("click", () => {
+        const symbol = cleanSymbol(symbolInput.value);
+        loadSingleSymbol(symbol);
+      });
 
-symbolInput.addEventListener("keydown", event => {
-  if (event.key === "Enter") {
-    loadSymbolBtn.click();
-  }
-});
+      symbolInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          loadSymbolBtn.click();
+        }
+      });
 
-modeButtons.forEach(btn => {
-  btn.addEventListener("click", () => {
-    setMode(btn.dataset.mode);
-  });
-});
+      modeButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          setMode(btn.dataset.mode);
+        });
+      });
 
-window.addEventListener("resize", resizeVisibleCharts);
+      window.addEventListener("resize", resizeVisibleCharts);
 
-createPanel(singleViewEl.querySelector(".dashboard-panel"), "SPY");
-createPanel(splitViewEl.querySelector('[data-panel-symbol="SPY"]'), "SPY");
-createPanel(splitViewEl.querySelector('[data-panel-symbol="NVDA"]'), "NVDA");
+      createPanel(singleViewEl.querySelector(".dashboard-panel"), "SPY");
+      createPanel(
+        splitViewEl.querySelector('[data-panel-symbol="SPY"]'),
+        "SPY",
+      );
+      createPanel(
+        splitViewEl.querySelector('[data-panel-symbol="NVDA"]'),
+        "NVDA",
+      );
 
-renderFavorites();
-setInterval(renderFavorites, 30000);
+      renderFavorites();
+      setInterval(renderFavorites, 30000);
 
-startAutoScan();
-runScan();
-</script>
-
-</body>
+      startAutoScan();
+      runScan();
+    </script>
+  </body>
 </html>
