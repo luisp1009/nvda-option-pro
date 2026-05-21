@@ -1010,15 +1010,11 @@ def get_best_options(symbol: str, signal: dict, market_status: str):
     if stock_price <= 0:
         return []
 
-    # Match contracts to signal direction.
-    # If no trade, show both sides.
-    if signal_direction == "CALL":
-        directions_to_scan = ["CALL"]
-    elif signal_direction == "PUT":
-        directions_to_scan = ["PUT"]
-    else:
-       cache_set(OPTIONS_CACHE, cache_key, [])
-    return []
+    if signal_direction == "NO TRADE":
+        cache_set(OPTIONS_CACHE, cache_key, [])
+        return []
+
+    directions_to_scan = [signal_direction]
 
     all_picks = []
     provider_used = "none"
@@ -1028,8 +1024,6 @@ def get_best_options(symbol: str, signal: dict, market_status: str):
         try:
             valid_dates = tradier_option_dates_in_range(symbol, MIN_DTE, MAX_DTE)
             valid_dates = valid_dates[:MAX_EXPIRATIONS_TO_SCAN]
-
-            print("TRADIER VALID OPTION DATES:", valid_dates)
 
             for exp, dte in valid_dates:
                 chain_df = tradier_chain_df(symbol, exp)
@@ -1054,11 +1048,6 @@ def get_best_options(symbol: str, signal: dict, market_status: str):
                         provider="tradier",
                     )
 
-                    picks = [
-                        p for p in picks
-                        if p.get("direction") == scan_direction
-                    ]
-
                     all_picks.extend(picks)
 
             provider_used = "tradier"
@@ -1073,12 +1062,9 @@ def get_best_options(symbol: str, signal: dict, market_status: str):
             valid_dates = yahoo_option_dates_in_range(ticker, MIN_DTE, MAX_DTE)
             valid_dates = valid_dates[:MAX_EXPIRATIONS_TO_SCAN]
 
-            print("YAHOO VALID OPTION DATES:", valid_dates)
-
             for exp, dte in valid_dates:
                 for scan_direction in directions_to_scan:
                     option_side = "calls" if scan_direction == "CALL" else "puts"
-
                     raw_df = yahoo_chain_df(ticker, symbol, exp, option_side)
 
                     side_df = normalize_options_df(
@@ -1096,11 +1082,6 @@ def get_best_options(symbol: str, signal: dict, market_status: str):
                         dte=dte,
                         provider="yahoo",
                     )
-
-                    picks = [
-                        p for p in picks
-                        if p.get("direction") == scan_direction
-                    ]
 
                     all_picks.extend(picks)
 
