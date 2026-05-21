@@ -800,7 +800,12 @@ async function runScan(force = false) {
 
   isScanning = true;
   scanBtn.disabled = true;
-  globalStatusEl.textContent = force ? "Refreshing live scan..." : "Scanning...";
+
+  const refreshTimeText = new Date().toLocaleString();
+
+  globalStatusEl.textContent = force
+    ? `Refreshing live scan... ${refreshTimeText}`
+    : `Auto refreshing... ${refreshTimeText}`;
 
   const visiblePanels = [...document.querySelectorAll(".dashboard-panel")]
     .filter(panel => !panel.closest(".hidden"));
@@ -811,9 +816,16 @@ async function runScan(force = false) {
 
   const successCount = results.filter(Boolean).length;
 
-  const nowText = new Date().toLocaleString();
+  globalStatusEl.textContent = `Updated ${successCount}/${visiblePanels.length} • ${refreshTimeText}`;
 
-  globalStatusEl.textContent = `Updated ${successCount}/${visiblePanels.length} • ${nowText}`;
+  visiblePanels.forEach(panel => {
+    const panelData = panelStore.get(panel);
+
+    if (panelData && panelData.refs && panelData.refs.updated) {
+      panelData.refs.updated.textContent = refreshTimeText;
+    }
+  });
+
   scanBtn.disabled = false;
   isScanning = false;
   remainingSeconds = AUTO_SCAN_MS / 1000;
