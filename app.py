@@ -17,11 +17,11 @@ APP_VERSION = "tradier-options-cache-v1"
 DEFAULT_SYMBOLS = ["SPY", "NVDA", "AAPL", "MSFT", "TSLA", "AMD", "AMZN", "META", "QQQ"]
 
 # Wider range so contracts are easier to find
-MIN_DTE = 1
-MAX_DTE = 60
+MIN_DTE = 45
+MAX_DTE = 120
 
 # Limit option-chain API calls per scan to avoid rate limits
-MAX_EXPIRATIONS_TO_SCAN = 3
+MAX_EXPIRATIONS_TO_SCAN = 5
 
 RISK_FREE_RATE = 0.045
 
@@ -37,6 +37,10 @@ TARGET_R_MULT = 1.8
 OPTION_STOP_PCT = 0.35
 OPTION_TARGET_PCT = 0.60
 TOP_OPTION_PICKS = 8
+
+TARGET_DELTA_MIN = 0.62
+TARGET_DELTA_MAX = 0.66
+TARGET_DELTA_IDEAL = 0.64
 
 EASTERN = ZoneInfo("America/New_York")
 
@@ -789,8 +793,13 @@ def score_option_row(row: pd.Series, stock_price: float, dte: int) -> float:
     liquidity_score = min(oi / 1000, 1.5) + min(vol / 300, 1.0)
     spread_score = max(0.0, 1.4 - spread_pct * 3)
     moneyness_score = max(0.0, 1.8 - abs(strike - stock_price) / max(stock_price * 0.05, 1))
-    delta_score = max(0.0, 1.7 - abs(delta_abs - 0.55) * 2.5)
-    dte_score = max(0.0, 1.4 - abs(dte - 21) / 25)
+
+    # Prefer 0.62–0.66 delta, ideal around 0.64
+    delta_score = max(0.0, 2.5 - abs(delta_abs - TARGET_DELTA_IDEAL) * 20)
+
+    # Prefer around 60 DTE, but allow 45–120
+    dte_score = max(0.0, 1.4 - abs(dte - 60) / 45)
+
     premium_score = 1.0 if 0.10 <= mid <= 100 else 0.25
 
     return round(
@@ -802,7 +811,6 @@ def score_option_row(row: pd.Series, stock_price: float, dte: int) -> float:
         + premium_score,
         4,
     )
-
 
 def build_option_why(row: pd.Series, dte: int, provider: str, filter_used: str) -> str:
     notes = []
@@ -950,10 +958,19 @@ def collect_option_picks_from_df(df: pd.DataFrame, scan_direction: str, exp: str
 
     picks = []
 
+    # Only allow contracts inside your preferred delta range
+    df = df[
+        (df["delta_est"].abs() >= TARGET_DELTA_MIN)
+        & (df["delta_est"].abs() <= TARGET_DELTA_MAX)
+    ].copy()
+
+    if df.empty:
+        return []
+
     filter_sets = [
-        {"name": "strict", "min_oi": 200, "min_vol": 20, "max_spread": 0.18, "delta_min": 0.35, "delta_max": 0.75},
-        {"name": "medium", "min_oi": 25, "min_vol": 0, "max_spread": 0.45, "delta_min": 0.20, "delta_max": 0.90},
-        {"name": "loose", "min_oi": 0, "min_vol": 0, "max_spread": 5.00, "delta_min": 0.01, "delta_max": 0.99},
+        {"name": "strict", "min_oi": 200, "min_vol": 20, "max_spread": 0.18},
+        {"name": "medium", "min_oi": 25, "min_vol": 0, "max_spread": 0.45},
+        {"name": "loose", "min_oi": 0, "min_vol": 0, "max_spread": 5.00},
     ]
 
     for filters in filter_sets:
@@ -962,17 +979,6 @@ def collect_option_picks_from_df(df: pd.DataFrame, scan_direction: str, exp: str
             & (df["volume"] >= filters["min_vol"])
             & (df["spread_pct"] <= filters["max_spread"])
         ].copy()
-
-        if scan_direction == "CALL":
-            fdf = fdf[
-                (fdf["delta_est"] >= filters["delta_min"])
-                & (fdf["delta_est"] <= filters["delta_max"])
-            ].copy()
-        else:
-            fdf = fdf[
-                (fdf["delta_est"] <= -filters["delta_min"])
-                & (fdf["delta_est"] >= -filters["delta_max"])
-            ].copy()
 
         if not fdf.empty:
             fdf = fdf.sort_values(
@@ -985,14 +991,13 @@ def collect_option_picks_from_df(df: pd.DataFrame, scan_direction: str, exp: str
 
             return picks
 
-    # Final fallback: show closest usable contracts even if Greeks/liquidity are not ideal.
     fallback_df = df.sort_values(
         by=["score", "openInterest", "volume", "distance_from_price"],
         ascending=[False, False, False, True],
     )
 
     for _, row in fallback_df.head(4).iterrows():
-        picks.append(row_to_pick(row, scan_direction, exp, dte, provider, "fallback"))
+        picks.append(row_to_pick(row, scan_direction, exp, dte, provider, "fallback delta 0.62-0.66"))
 
     return picks
 
