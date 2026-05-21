@@ -770,7 +770,7 @@ function renderPanel(panelEl, data) {
   renderFavorites();
 }
 
-async function scanPanel(panelEl, force = false) {
+async function scanPanel(panelEl, force = false, refreshTimeText = "") {
   const symbol = cleanSymbol(panelEl.dataset.panelSymbol || "SPY");
 
   try {
@@ -783,11 +783,22 @@ async function scanPanel(panelEl, force = false) {
     }
 
     renderPanel(panelEl, result.data);
+
+    const panelData = panelStore.get(panelEl);
+
+    if (panelData && panelData.refs && panelData.refs.updated) {
+      panelData.refs.updated.textContent = refreshTimeText;
+    }
+
+    panelEl.querySelectorAll(".panel-updated").forEach(el => {
+      el.textContent = refreshTimeText;
+    });
+
     return true;
   } catch (err) {
     const panelData = panelStore.get(panelEl);
 
-    if (panelData && panelData.refs.tradeExplanation) {
+    if (panelData && panelData.refs && panelData.refs.tradeExplanation) {
       panelData.refs.tradeExplanation.textContent = `Error loading ${symbol}: ${err.message}`;
     }
 
@@ -811,7 +822,7 @@ async function runScan(force = false) {
     .filter(panel => !panel.closest(".hidden"));
 
   const results = await Promise.all(
-    visiblePanels.map(panel => scanPanel(panel, force))
+    visiblePanels.map(panel => scanPanel(panel, force, refreshTimeText))
   );
 
   const successCount = results.filter(Boolean).length;
@@ -824,6 +835,10 @@ async function runScan(force = false) {
     if (panelData && panelData.refs && panelData.refs.updated) {
       panelData.refs.updated.textContent = refreshTimeText;
     }
+
+    panel.querySelectorAll(".panel-updated").forEach(el => {
+      el.textContent = refreshTimeText;
+    });
   });
 
   scanBtn.disabled = false;
