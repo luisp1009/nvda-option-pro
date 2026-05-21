@@ -1308,23 +1308,35 @@ def quote():
     symbol = normalize_symbol(request.args.get("symbol", "SPY"))
     cache_key = f"quote:{symbol}"
 
-    cached = cache_get(QUOTE_CACHE, cache_key, QUOTE_CACHE_SECONDS)
+    cached = cache_get(QUOTE_CACHE, cache_key, 15)
     if cached is not None:
         return jsonify(cached)
 
     try:
         ticker = yf.Ticker(symbol)
-        hist = ticker.history(period="2d", interval="1d", prepost=True)
+
+        # LIVE intraday data
+        hist = ticker.history(
+            period="1d",
+            interval="1m",
+            prepost=True
+        )
 
         if hist.empty:
-            return jsonify({"success": False, "error": "No quote found"}), 404
+            return jsonify({
+                "success": False,
+                "error": "No quote found"
+            }), 404
 
-        price = float(hist["Close"].dropna().iloc[-1])
+        latest = hist.iloc[-1]
+
+        price = float(latest["Close"])
 
         payload = {
             "success": True,
             "symbol": symbol,
             "price": round(price, 2),
+            "updated": datetime.now(EASTERN).strftime("%I:%M:%S %p"),
             "version": APP_VERSION,
         }
 
