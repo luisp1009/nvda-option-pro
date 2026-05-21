@@ -770,11 +770,12 @@ function renderPanel(panelEl, data) {
   renderFavorites();
 }
 
-async function scanPanel(panelEl) {
+async function scanPanel(panelEl, force = false) {
   const symbol = cleanSymbol(panelEl.dataset.panelSymbol || "SPY");
 
   try {
-    const response = await fetch(`/scan?symbol=${encodeURIComponent(symbol)}`);
+    const url = `/scan?symbol=${encodeURIComponent(symbol)}&force=${force ? "1" : "0"}&t=${Date.now()}`;
+    const response = await fetch(url, { cache: "no-store" });
     const result = await response.json();
 
     if (!result.success) {
@@ -794,20 +795,25 @@ async function scanPanel(panelEl) {
   }
 }
 
-async function runScan() {
+async function runScan(force = false) {
   if (isScanning) return;
 
   isScanning = true;
   scanBtn.disabled = true;
-  globalStatusEl.textContent = "Scanning...";
+  globalStatusEl.textContent = force ? "Refreshing live scan..." : "Scanning...";
 
   const visiblePanels = [...document.querySelectorAll(".dashboard-panel")]
     .filter(panel => !panel.closest(".hidden"));
 
-  const results = await Promise.all(visiblePanels.map(scanPanel));
+  const results = await Promise.all(
+    visiblePanels.map(panel => scanPanel(panel, force))
+  );
+
   const successCount = results.filter(Boolean).length;
 
-  globalStatusEl.textContent = `Updated ${successCount}/${visiblePanels.length}`;
+  const nowText = new Date().toLocaleString();
+
+  globalStatusEl.textContent = `Updated ${successCount}/${visiblePanels.length} • ${nowText}`;
   scanBtn.disabled = false;
   isScanning = false;
   remainingSeconds = AUTO_SCAN_MS / 1000;
@@ -846,7 +852,9 @@ function startAutoScan() {
   if (autoScanInterval) clearInterval(autoScanInterval);
   if (countdownInterval) clearInterval(countdownInterval);
 
-  autoScanInterval = setInterval(runScan, AUTO_SCAN_MS);
+ autoScanInterval = setInterval(() => {
+  runScan(false);
+}, AUTO_SCAN_MS);
 
   countdownInterval = setInterval(() => {
     remainingSeconds -= 1;
@@ -868,7 +876,9 @@ if (heatmapBtn) {
   });
 }
 
-scanBtn.addEventListener("click", runScan);
+scanBtn.addEventListener("click", () => {
+  runScan(true);
+});
 
 loadSymbolBtn.addEventListener("click", () => {
   const symbol = cleanSymbol(symbolInput.value);

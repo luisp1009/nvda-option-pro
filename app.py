@@ -44,7 +44,7 @@ EASTERN = ZoneInfo("America/New_York")
 SCAN_CACHE = {}
 QUOTE_CACHE = {}
 OPTIONS_CACHE = {}
-CACHE_SECONDS = int(os.getenv("CACHE_SECONDS", "300"))
+CACHE_SECONDS = int(os.getenv("CACHE_SECONDS", "60"))
 QUOTE_CACHE_SECONDS = int(os.getenv("QUOTE_CACHE_SECONDS", "60"))
 OPTIONS_CACHE_SECONDS = int(os.getenv("OPTIONS_CACHE_SECONDS", "300"))
 
@@ -1266,27 +1266,25 @@ def scan():
     force = request.args.get("force", "0") == "1"
     cache_key = f"scan:{symbol}"
 
+    now = datetime.now(EASTERN)
+    current_session = market_session_info(now)
+
     cached = cache_get(SCAN_CACHE, cache_key, CACHE_SECONDS)
 
     if cached is not None and not force:
-        cached_copy = dict(cached)
-        cached_copy["cached"] = True
-        return jsonify({"success": True, "data": cached_copy})
+        cached_status = cached.get("market_status")
+
+        if cached_status == current_session["status"]:
+            cached_copy = dict(cached)
+            cached_copy["cached"] = True
+            return jsonify({"success": True, "data": cached_copy})
 
     try:
         data = build_scan(symbol)
+        data["cached"] = False
+        data["updated_at"] = datetime.now(EASTERN).strftime("%Y-%m-%d %I:%M:%S %p ET")
 
         cache_set(SCAN_CACHE, cache_key, data)
-
-        print("SCAN OK")
-        print("Version:", APP_VERSION)
-        print("Symbol:", symbol)
-        print("Signal:", data["signal"]["direction"])
-        print("Score:", data["signal"]["score"])
-        print("Market status:", data["market_status"])
-        print("Options count:", len(data["options"]))
-        print("News count:", len(data["news"]))
-        print("Candles count:", len(data["candles"]))
 
         return jsonify({"success": True, "data": data})
 
